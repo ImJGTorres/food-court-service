@@ -1,0 +1,19 @@
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/foodcourt?createDatabaseIfNotExist=true
+    username: root
+    password: 1234
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+users-service:
+  url: http://localhost:8081
+
+appDescription: "Pragma Powerup - Food Court"
+appVersion: "1.0.0"
