@@ -2,6 +2,7 @@ package com.pragma.powerup.domain.usecase;
 
 import com.pragma.powerup.domain.exception.CategoryNotFoundException;
 import com.pragma.powerup.domain.exception.DishAlreadyExistsException;
+import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.model.CategoryModel;
@@ -33,6 +34,7 @@ class DishUseCaseTest {
     private static final Long OTHER_OWNER_ID = 2L;
     private static final Long RESTAURANT_ID = 10L;
     private static final Long CATEGORY_ID = 5L;
+    private static final Long DISH_ID = 7L;
 
     @Mock
     private IDishPersistencePort dishPersistencePort;
@@ -139,6 +141,65 @@ class DishUseCaseTest {
                 DishAlreadyExistsException.class, () -> dishUseCase.saveDish(dish, OWNER_ID));
 
         assertEquals("A dish with this name already exists in the restaurant", exception.getMessage());
+        verify(dishPersistencePort, never()).saveDish(any());
+    }
+
+    private DishModel buildExistingDish(Long ownerId) {
+        DishModel dish = new DishModel();
+        dish.setId(DISH_ID);
+        dish.setName("Hamburguesa");
+        dish.setPrice(15000);
+        dish.setDescription("Con queso");
+        dish.setActive(true);
+        dish.setRestaurant(buildRestaurantOwnedBy(ownerId));
+        return dish;
+    }
+
+    private DishModel buildChanges() {
+        DishModel changes = new DishModel();
+        changes.setPrice(18000);
+        changes.setDescription("Con queso y tocineta");
+        return changes;
+    }
+
+    @Test
+    void updateDishWithValidDataChangesOnlyPriceAndDescriptionAndSavesIt() {
+        DishModel existingDish = buildExistingDish(OWNER_ID);
+        DishModel savedDish = new DishModel();
+        when(dishPersistencePort.findDishById(DISH_ID)).thenReturn(Optional.of(existingDish));
+        when(dishPersistencePort.saveDish(existingDish)).thenReturn(savedDish);
+
+        DishModel result = dishUseCase.updateDish(DISH_ID, buildChanges(), OWNER_ID);
+
+        assertSame(savedDish, result);
+        assertEquals(18000, existingDish.getPrice());
+        assertEquals("Con queso y tocineta", existingDish.getDescription());
+        assertEquals("Hamburguesa", existingDish.getName());
+        assertTrue(existingDish.getActive());
+        verify(dishPersistencePort).saveDish(existingDish);
+    }
+
+    @Test
+    void updateDishWhenDishDoesNotExistThrowsDishNotFoundException() {
+        when(dishPersistencePort.findDishById(DISH_ID)).thenReturn(Optional.empty());
+
+        DishNotFoundException exception = assertThrows(
+                DishNotFoundException.class, () -> dishUseCase.updateDish(DISH_ID, buildChanges(), OWNER_ID));
+
+        assertEquals("The requested dish does not exist", exception.getMessage());
+        verify(dishPersistencePort, never()).saveDish(any());
+    }
+
+    @Test
+    void updateDishWhenCallerIsNotTheRestaurantOwnerThrowsNotRestaurantOwnerException() {
+        DishModel existingDish = buildExistingDish(OTHER_OWNER_ID);
+        when(dishPersistencePort.findDishById(DISH_ID)).thenReturn(Optional.of(existingDish));
+
+        NotRestaurantOwnerException exception = assertThrows(
+                NotRestaurantOwnerException.class, () -> dishUseCase.updateDish(DISH_ID, buildChanges(), OWNER_ID));
+
+        assertEquals("Only the owner of the restaurant can manage its dishes", exception.getMessage());
+        assertEquals(15000, existingDish.getPrice());
         verify(dishPersistencePort, never()).saveDish(any());
     }
 }

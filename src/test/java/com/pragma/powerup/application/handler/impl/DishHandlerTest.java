@@ -1,10 +1,12 @@
 package com.pragma.powerup.application.handler.impl;
 
 import com.pragma.powerup.application.dto.request.DishRequestDto;
+import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
 import com.pragma.powerup.application.mapper.IDishRequestMapper;
 import com.pragma.powerup.application.mapper.IDishResponseMapper;
 import com.pragma.powerup.domain.api.IDishServicePort;
+import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
 import com.pragma.powerup.domain.model.DishModel;
 import org.junit.jupiter.api.Test;
@@ -66,6 +68,37 @@ class DishHandlerTest {
                 .thenThrow(new NotRestaurantOwnerException("Only the owner of the restaurant can manage its dishes"));
 
         assertThrows(NotRestaurantOwnerException.class, () -> dishHandler.saveDish(request));
+
+        verifyNoInteractions(dishResponseMapper);
+    }
+
+    @Test
+    void updateDishMapsRequestPassesDishIdAndOwnerIdToTheServicePortAndReturnsMappedResponse() {
+        DishUpdateRequestDto request = new DishUpdateRequestDto();
+        request.setOwnerId(OWNER_ID);
+        DishModel changes = new DishModel();
+        DishModel updatedModel = new DishModel();
+        DishResponseDto expectedResponse = new DishResponseDto();
+        when(dishRequestMapper.toDish(request)).thenReturn(changes);
+        when(dishServicePort.updateDish(7L, changes, OWNER_ID)).thenReturn(updatedModel);
+        when(dishResponseMapper.toResponse(updatedModel)).thenReturn(expectedResponse);
+
+        DishResponseDto result = dishHandler.updateDish(7L, request);
+
+        assertSame(expectedResponse, result);
+        verify(dishServicePort).updateDish(7L, changes, OWNER_ID);
+    }
+
+    @Test
+    void updateDishWhenServicePortThrowsPropagatesExceptionWithoutMappingResponse() {
+        DishUpdateRequestDto request = new DishUpdateRequestDto();
+        request.setOwnerId(OWNER_ID);
+        DishModel changes = new DishModel();
+        when(dishRequestMapper.toDish(request)).thenReturn(changes);
+        when(dishServicePort.updateDish(7L, changes, OWNER_ID))
+                .thenThrow(new DishNotFoundException("The requested dish does not exist"));
+
+        assertThrows(DishNotFoundException.class, () -> dishHandler.updateDish(7L, request));
 
         verifyNoInteractions(dishResponseMapper);
     }
