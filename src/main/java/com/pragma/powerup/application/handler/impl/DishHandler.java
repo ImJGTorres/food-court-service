@@ -1,6 +1,7 @@
 package com.pragma.powerup.application.handler.impl;
 
 import com.pragma.powerup.application.dto.request.DishRequestDto;
+import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
 import com.pragma.powerup.application.handler.IDishHandler;
 import com.pragma.powerup.application.mapper.IDishRequestMapper;
@@ -24,5 +25,12 @@ public class DishHandler implements IDishHandler {
         DishModel dishModel = dishRequestMapper.toDish(dishRequestDto);
         DishModel savedDish = dishServicePort.saveDish(dishModel, dishRequestDto.getOwnerId());
         return dishResponseMapper.toResponse(savedDish);
+    }
+
+    @Override
+    public DishResponseDto updateDish(Long dishId, DishUpdateRequestDto dishUpdateRequestDto) {
+        DishModel dishModel = dishRequestMapper.toDish(dishUpdateRequestDto);
+        DishModel updatedDish = dishServicePort.updateDish(dishId, dishModel, dishUpdateRequestDto.getOwnerId());
+        return dishResponseMapper.toResponse(updatedDish);
     }
 }
