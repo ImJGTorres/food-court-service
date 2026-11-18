@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,8 +37,8 @@ public class DishRestController {
             @ApiResponse(responseCode = "404", description = "Restaurant or category not found", content = @Content)
     })
     @PostMapping(value = "/dishes", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<DishResponseDto> saveDish(@Valid @RequestBody DishRequestDto dishRequestDto) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(dishHandler.saveDish(dishRequestDto));
+    public ResponseEntity<DishResponseDto> saveDish(@Valid @RequestBody DishRequestDto dishRequestDto, Authentication authentication) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(dishHandler.saveDish(dishRequestDto, getUserId(authentication)));
     }
 
 
@@ -52,7 +53,11 @@ public class DishRestController {
     })
     @PatchMapping(value = "/dishes/{id}", consumes = "application/json", produces = "application/json")
     public ResponseEntity<DishResponseDto> updateDish(@PathVariable Long id,
-            @Valid @RequestBody DishUpdateRequestDto dishUpdateRequestDto) {
-        return ResponseEntity.ok(dishHandler.updateDish(id, dishUpdateRequestDto));
+            @Valid @RequestBody DishUpdateRequestDto dishUpdateRequestDto, Authentication authentication) {
+        return ResponseEntity.ok(dishHandler.updateDish(id, dishUpdateRequestDto, getUserId(authentication)));
+    }
+
+    private Long getUserId(Authentication authentication) {
+        return (Long) authentication.getPrincipal();
     }
 }

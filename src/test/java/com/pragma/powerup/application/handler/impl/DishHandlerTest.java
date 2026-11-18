@@ -24,6 +24,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class DishHandlerTest {
     private static final Long OWNER_ID = 1L;
+    private static final Long DISH_ID = 7L;
 
     @Mock
     private IDishServicePort dishServicePort;
@@ -37,15 +38,9 @@ class DishHandlerTest {
     @InjectMocks
     private DishHandler dishHandler;
 
-    private DishRequestDto buildRequest() {
-        DishRequestDto request = new DishRequestDto();
-        request.setOwnerId(OWNER_ID);
-        return request;
-    }
-
     @Test
     void saveDishMapsRequestPassesTheOwnerIdToTheServicePortAndReturnsMappedResponse() {
-        DishRequestDto request = buildRequest();
+        DishRequestDto request = new DishRequestDto();
         DishModel modelToSave = new DishModel();
         DishModel savedModel = new DishModel();
         DishResponseDto expectedResponse = new DishResponseDto();
@@ -53,7 +48,7 @@ class DishHandlerTest {
         when(dishServicePort.saveDish(modelToSave, OWNER_ID)).thenReturn(savedModel);
         when(dishResponseMapper.toResponse(savedModel)).thenReturn(expectedResponse);
 
-        DishResponseDto result = dishHandler.saveDish(request);
+        DishResponseDto result = dishHandler.saveDish(request, OWNER_ID);
 
         assertSame(expectedResponse, result);
         verify(dishServicePort).saveDish(modelToSave, OWNER_ID);
@@ -61,13 +56,13 @@ class DishHandlerTest {
 
     @Test
     void saveDishWhenServicePortThrowsPropagatesExceptionWithoutMappingResponse() {
-        DishRequestDto request = buildRequest();
+        DishRequestDto request = new DishRequestDto();
         DishModel modelToSave = new DishModel();
         when(dishRequestMapper.toDish(request)).thenReturn(modelToSave);
         when(dishServicePort.saveDish(modelToSave, OWNER_ID))
                 .thenThrow(new NotRestaurantOwnerException("Only the owner of the restaurant can manage its dishes"));
 
-        assertThrows(NotRestaurantOwnerException.class, () -> dishHandler.saveDish(request));
+        assertThrows(NotRestaurantOwnerException.class, () -> dishHandler.saveDish(request, OWNER_ID));
 
         verifyNoInteractions(dishResponseMapper);
     }
@@ -75,30 +70,28 @@ class DishHandlerTest {
     @Test
     void updateDishMapsRequestPassesDishIdAndOwnerIdToTheServicePortAndReturnsMappedResponse() {
         DishUpdateRequestDto request = new DishUpdateRequestDto();
-        request.setOwnerId(OWNER_ID);
         DishModel changes = new DishModel();
         DishModel updatedModel = new DishModel();
         DishResponseDto expectedResponse = new DishResponseDto();
         when(dishRequestMapper.toDish(request)).thenReturn(changes);
-        when(dishServicePort.updateDish(7L, changes, OWNER_ID)).thenReturn(updatedModel);
+        when(dishServicePort.updateDish(DISH_ID, changes, OWNER_ID)).thenReturn(updatedModel);
         when(dishResponseMapper.toResponse(updatedModel)).thenReturn(expectedResponse);
 
-        DishResponseDto result = dishHandler.updateDish(7L, request);
+        DishResponseDto result = dishHandler.updateDish(DISH_ID, request, OWNER_ID);
 
         assertSame(expectedResponse, result);
-        verify(dishServicePort).updateDish(7L, changes, OWNER_ID);
+        verify(dishServicePort).updateDish(DISH_ID, changes, OWNER_ID);
     }
 
     @Test
     void updateDishWhenServicePortThrowsPropagatesExceptionWithoutMappingResponse() {
         DishUpdateRequestDto request = new DishUpdateRequestDto();
-        request.setOwnerId(OWNER_ID);
         DishModel changes = new DishModel();
         when(dishRequestMapper.toDish(request)).thenReturn(changes);
-        when(dishServicePort.updateDish(7L, changes, OWNER_ID))
+        when(dishServicePort.updateDish(DISH_ID, changes, OWNER_ID))
                 .thenThrow(new DishNotFoundException("The requested dish does not exist"));
 
-        assertThrows(DishNotFoundException.class, () -> dishHandler.updateDish(7L, request));
+        assertThrows(DishNotFoundException.class, () -> dishHandler.updateDish(DISH_ID, request, OWNER_ID));
 
         verifyNoInteractions(dishResponseMapper);
     }

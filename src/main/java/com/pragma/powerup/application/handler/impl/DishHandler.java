@@ -21,16 +21,16 @@ public class DishHandler implements IDishHandler {
     private final IDishRequestMapper dishRequestMapper;
 
     @Override
-    public DishResponseDto saveDish(DishRequestDto dishRequestDto) {
+    public DishResponseDto saveDish(DishRequestDto dishRequestDto, Long ownerId) {
         DishModel dishModel = dishRequestMapper.toDish(dishRequestDto);
-        DishModel savedDish = dishServicePort.saveDish(dishModel, dishRequestDto.getOwnerId());
+        DishModel savedDish = dishServicePort.saveDish(dishModel, ownerId);
         return dishResponseMapper.toResponse(savedDish);
     }
 
     @Override
-    public DishResponseDto updateDish(Long dishId, DishUpdateRequestDto dishUpdateRequestDto) {
+    public DishResponseDto updateDish(Long dishId, DishUpdateRequestDto dishUpdateRequestDto, Long ownerId) {
         DishModel dishModel = dishRequestMapper.toDish(dishUpdateRequestDto);
-        DishModel updatedDish = dishServicePort.updateDish(dishId, dishModel, dishUpdateRequestDto.getOwnerId());
+        DishModel updatedDish = dishServicePort.updateDish(dishId, dishModel, ownerId);
         return dishResponseMapper.toResponse(updatedDish);
     }
 }

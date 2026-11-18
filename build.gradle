@@ -28,6 +28,7 @@ ext {
 	lombokMapstructBindingVersion = "0.2.0"
 	openApiVersion = "2.10.0"
 	springCloudVersion = "2025.0.3"
+	jjwtVersion = "0.13.0"
 }
 
 dependencyManagement {
@@ -55,6 +56,11 @@ dependencies {
 	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${openApiVersion}"
 
 	implementation "org.springframework.cloud:spring-cloud-starter-openfeign"
+
+	implementation "org.springframework.boot:spring-boot-starter-security"
+	implementation "io.jsonwebtoken:jjwt-api:${jjwtVersion}"
+	runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
+	runtimeOnly "io.jsonwebtoken:jjwt-jackson:${jjwtVersion}"
 }
 
 tasks.named('test') {
