@@ -19,6 +19,4 @@ public class DishUpdateRequestDto {
     @Size(max = 255)
     private String description;
 
-    @NotNull
-    private Long ownerId;
 }

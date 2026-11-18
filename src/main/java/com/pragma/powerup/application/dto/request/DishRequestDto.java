@@ -33,7 +33,4 @@ public class DishRequestDto {
     @NotNull
     private Long restaurantId;
 
-    @NotNull
-    private Long ownerId;
-
 }
