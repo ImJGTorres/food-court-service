@@ -55,6 +55,14 @@ public class DishUseCase implements IDishServicePort {
         return dishPersistencePort.saveDish(dish);
     }
 
+    @Override
+    public DishModel updateDishStatus(Long dishId, Boolean active, Long ownerId) {
+        DishModel dish = findDish(dishId);
+        validateRestaurantOwner(dish.getRestaurant(), ownerId);
+        dish.setActive(active);
+        return dishPersistencePort.saveDish(dish);
+    }
+
     private RestaurantModel findRestaurant(Long restaurantId) {
         return restaurantPersistencePort.findRestaurantById(restaurantId)
                 .orElseThrow(() -> new RestaurantNotFoundException(RESTAURANT_NOT_FOUND_MESSAGE));

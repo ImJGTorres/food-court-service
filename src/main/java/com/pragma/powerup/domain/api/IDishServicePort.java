@@ -6,4 +6,6 @@ public interface IDishServicePort {
     DishModel saveDish(DishModel dishModel, Long ownerId);
 
     DishModel updateDish(Long dishId, DishModel dishModel, Long ownerId);
+
+    DishModel updateDishStatus(Long dishId, Boolean active, Long ownerId);
 }

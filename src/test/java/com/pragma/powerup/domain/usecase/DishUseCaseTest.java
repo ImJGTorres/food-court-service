@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -200,6 +201,72 @@ class DishUseCaseTest {
 
         assertEquals("Only the owner of the restaurant can manage its dishes", exception.getMessage());
         assertEquals(15000, existingDish.getPrice());
+        verify(dishPersistencePort, never()).saveDish(any());
+    }
+
+    @Test
+    void updateDishStatusToInactiveDisablesTheDishAndChangesNothingElse() {
+        DishModel existingDish = buildExistingDish(OWNER_ID);
+        DishModel savedDish = new DishModel();
+        when(dishPersistencePort.findDishById(DISH_ID)).thenReturn(Optional.of(existingDish));
+        when(dishPersistencePort.saveDish(existingDish)).thenReturn(savedDish);
+
+        DishModel result = dishUseCase.updateDishStatus(DISH_ID, false, OWNER_ID);
+
+        assertSame(savedDish, result);
+        assertFalse(existingDish.getActive());
+        assertEquals(15000, existingDish.getPrice());
+        assertEquals("Con queso", existingDish.getDescription());
+        assertEquals("Hamburguesa", existingDish.getName());
+        verify(dishPersistencePort).saveDish(existingDish);
+    }
+
+    @Test
+    void updateDishStatusToActiveEnablesADisabledDish() {
+        DishModel existingDish = buildExistingDish(OWNER_ID);
+        existingDish.setActive(false);
+        when(dishPersistencePort.findDishById(DISH_ID)).thenReturn(Optional.of(existingDish));
+        when(dishPersistencePort.saveDish(existingDish)).thenReturn(existingDish);
+
+        DishModel result = dishUseCase.updateDishStatus(DISH_ID, true, OWNER_ID);
+
+        assertTrue(result.getActive());
+        verify(dishPersistencePort).saveDish(existingDish);
+    }
+
+    @Test
+    void updateDishStatusWithTheCurrentStatusIsAcceptedAndKeepsTheDishUnchanged() {
+        DishModel existingDish = buildExistingDish(OWNER_ID);
+        when(dishPersistencePort.findDishById(DISH_ID)).thenReturn(Optional.of(existingDish));
+        when(dishPersistencePort.saveDish(existingDish)).thenReturn(existingDish);
+
+        DishModel result = dishUseCase.updateDishStatus(DISH_ID, true, OWNER_ID);
+
+        assertTrue(result.getActive());
+        verify(dishPersistencePort).saveDish(existingDish);
+    }
+
+    @Test
+    void updateDishStatusWhenDishDoesNotExistThrowsDishNotFoundException() {
+        when(dishPersistencePort.findDishById(DISH_ID)).thenReturn(Optional.empty());
+
+        DishNotFoundException exception = assertThrows(
+                DishNotFoundException.class, () -> dishUseCase.updateDishStatus(DISH_ID, false, OWNER_ID));
+
+        assertEquals("The requested dish does not exist", exception.getMessage());
+        verify(dishPersistencePort, never()).saveDish(any());
+    }
+
+    @Test
+    void updateDishStatusWhenCallerIsNotTheRestaurantOwnerThrowsNotRestaurantOwnerException() {
+        DishModel existingDish = buildExistingDish(OTHER_OWNER_ID);
+        when(dishPersistencePort.findDishById(DISH_ID)).thenReturn(Optional.of(existingDish));
+
+        NotRestaurantOwnerException exception = assertThrows(
+                NotRestaurantOwnerException.class, () -> dishUseCase.updateDishStatus(DISH_ID, false, OWNER_ID));
+
+        assertEquals("Only the owner of the restaurant can manage its dishes", exception.getMessage());
+        assertTrue(existingDish.getActive());
         verify(dishPersistencePort, never()).saveDish(any());
     }
 }
