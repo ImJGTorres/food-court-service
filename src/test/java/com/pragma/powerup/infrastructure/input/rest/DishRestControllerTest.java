@@ -376,6 +376,32 @@ class DishRestControllerTest {
                 .andExpect(jsonPath("$.message").value("Only the owner of the restaurant can manage its dishes"));
     }
 
+    @Test
+    void updateDishStatusWithAWrongTypeReturns400WithAShortMessageAndNoInternalDetails() throws Exception {
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": \"maybe\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Malformed or invalid JSON request"))
+                .andExpect(jsonPath("$.trace").doesNotExist());
+
+        verifyNoInteractions(dishHandler);
+    }
+
+    @Test
+    void saveDishWithBrokenJsonReturns400WithAShortMessageAndNoInternalDetails() throws Exception {
+        mockMvc.perform(post(DISHES_URL)
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Malformed or invalid JSON request"))
+                .andExpect(jsonPath("$.trace").doesNotExist());
+
+        verifyNoInteractions(dishHandler);
+    }
+
     private String buildUpdateJson(int price) {
         return """
                 {
