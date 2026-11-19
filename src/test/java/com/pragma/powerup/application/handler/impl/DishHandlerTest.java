@@ -1,6 +1,7 @@
 package com.pragma.powerup.application.handler.impl;
 
 import com.pragma.powerup.application.dto.request.DishRequestDto;
+import com.pragma.powerup.application.dto.request.DishStatusRequestDto;
 import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
 import com.pragma.powerup.application.mapper.IDishRequestMapper;
@@ -92,6 +93,34 @@ class DishHandlerTest {
                 .thenThrow(new DishNotFoundException("The requested dish does not exist"));
 
         assertThrows(DishNotFoundException.class, () -> dishHandler.updateDish(DISH_ID, request, OWNER_ID));
+
+        verifyNoInteractions(dishResponseMapper);
+    }
+
+    @Test
+    void updateDishStatusPassesActiveDishIdAndOwnerIdToTheServicePortAndReturnsMappedResponse() {
+        DishStatusRequestDto request = new DishStatusRequestDto();
+        request.setActive(false);
+        DishModel updatedDish = new DishModel();
+        DishResponseDto expectedResponse = new DishResponseDto();
+        when(dishServicePort.updateDishStatus(DISH_ID, false, OWNER_ID)).thenReturn(updatedDish);
+        when(dishResponseMapper.toResponse(updatedDish)).thenReturn(expectedResponse);
+
+        DishResponseDto result = dishHandler.updateDishStatus(DISH_ID, request, OWNER_ID);
+
+        assertSame(expectedResponse, result);
+        verify(dishServicePort).updateDishStatus(DISH_ID, false, OWNER_ID);
+    }
+
+    @Test
+    void updateDishStatusWhenServicePortThrowsPropagatesExceptionWithoutMappingResponse() {
+        DishStatusRequestDto request = new DishStatusRequestDto();
+        request.setActive(true);
+        when(dishServicePort.updateDishStatus(DISH_ID, true, OWNER_ID))
+                .thenThrow(new NotRestaurantOwnerException("Only the owner of the restaurant can manage its dishes"));
+
+        assertThrows(NotRestaurantOwnerException.class,
+                () -> dishHandler.updateDishStatus(DISH_ID, request, OWNER_ID));
 
         verifyNoInteractions(dishResponseMapper);
     }
