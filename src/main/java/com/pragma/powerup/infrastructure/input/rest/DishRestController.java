@@ -1,6 +1,7 @@
 package com.pragma.powerup.infrastructure.input.rest;
 
 import com.pragma.powerup.application.dto.request.DishRequestDto;
+import com.pragma.powerup.application.dto.request.DishStatusRequestDto;
 import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
 import com.pragma.powerup.application.handler.IDishHandler;
@@ -55,6 +56,22 @@ public class DishRestController {
     public ResponseEntity<DishResponseDto> updateDish(@PathVariable Long id,
             @Valid @RequestBody DishUpdateRequestDto dishUpdateRequestDto, Authentication authentication) {
         return ResponseEntity.ok(dishHandler.updateDish(id, dishUpdateRequestDto, getUserId(authentication)));
+    }
+
+    @Operation(summary = "Enable or disable a dish")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Dish status updated",
+                content = @Content(mediaType = "application/json",
+                schema = @Schema(implementation = DishResponseDto.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid data", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Only the restaurant owner can enable or disable dishes", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Dish not found", content = @Content)
+    })
+    @PatchMapping(value = "/dishes/{id}/status", consumes = "application/json", produces = "application/json")
+    public ResponseEntity<DishResponseDto> updateDishStatus(@PathVariable Long id,
+            @Valid @RequestBody DishStatusRequestDto dishStatusRequestDto, Authentication authentication) {
+        return ResponseEntity.ok(dishHandler.updateDishStatus(id, dishStatusRequestDto, getUserId(authentication)));
     }
 
     private Long getUserId(Authentication authentication) {

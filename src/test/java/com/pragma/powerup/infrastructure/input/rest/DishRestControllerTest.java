@@ -1,6 +1,7 @@
 package com.pragma.powerup.infrastructure.input.rest;
 
 import com.pragma.powerup.application.dto.request.DishRequestDto;
+import com.pragma.powerup.application.dto.request.DishStatusRequestDto;
 import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
 import com.pragma.powerup.application.handler.IDishHandler;
@@ -13,6 +14,7 @@ import com.pragma.powerup.infrastructure.exceptionhandler.GlobalExceptionHandler
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,6 +26,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -38,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DishRestControllerTest {
     private static final String DISHES_URL = "/api/v1/dishes";
     private static final String DISH_URL = "/api/v1/dishes/7";
+    private static final String DISH_STATUS_URL = "/api/v1/dishes/7/status";
     private static final Long TOKEN_USER_ID = 1L;
 
     @Mock
@@ -274,6 +278,100 @@ class DishRestControllerTest {
                         .principal(ownerAuthentication)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(buildUpdateJson(18000)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Only the owner of the restaurant can manage its dishes"));
+    }
+
+    @Test
+    void updateDishStatusWithValidRequestReturns200AndTheDishWithItsNewStatus() throws Exception {
+        DishResponseDto response = new DishResponseDto();
+        response.setId(7L);
+        response.setActive(false);
+        when(dishHandler.updateDishStatus(eq(7L), any(DishStatusRequestDto.class), eq(TOKEN_USER_ID)))
+                .thenReturn(response);
+
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7))
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    @Test
+    void updateDishStatusGivesTheHandlerTheUserIdOfTheTokenAndTheRequestedStatus() throws Exception {
+        when(dishHandler.updateDishStatus(eq(7L), any(DishStatusRequestDto.class), eq(TOKEN_USER_ID)))
+                .thenReturn(new DishResponseDto());
+
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": true}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<DishStatusRequestDto> captor = ArgumentCaptor.forClass(DishStatusRequestDto.class);
+        verify(dishHandler).updateDishStatus(eq(7L), captor.capture(), eq(TOKEN_USER_ID));
+        assertTrue(captor.getValue().getActive());
+    }
+
+    @Test
+    void updateDishStatusWithoutTheActiveFieldReturns400AndDoesNotDisableTheDish() throws Exception {
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.active").exists());
+
+        verifyNoInteractions(dishHandler);
+    }
+
+    @Test
+    void updateDishStatusWithANonBooleanValueReturns400() throws Exception {
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": \"maybe\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(dishHandler);
+    }
+
+    @Test
+    void updateDishStatusWithNonNumericIdReturns400WithoutStackTrace() throws Exception {
+        mockMvc.perform(patch("/api/v1/dishes/abc/status")
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": true}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'id'"));
+
+        verifyNoInteractions(dishHandler);
+    }
+
+    @Test
+    void updateDishStatusWhenDishDoesNotExistReturns404WithTheDomainMessage() throws Exception {
+        when(dishHandler.updateDishStatus(eq(7L), any(DishStatusRequestDto.class), eq(TOKEN_USER_ID)))
+                .thenThrow(new DishNotFoundException("The requested dish does not exist"));
+
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": true}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("The requested dish does not exist"));
+    }
+
+    @Test
+    void updateDishStatusWhenCallerIsNotTheOwnerReturns403WithTheDomainMessage() throws Exception {
+        when(dishHandler.updateDishStatus(eq(7L), any(DishStatusRequestDto.class), eq(TOKEN_USER_ID)))
+                .thenThrow(new NotRestaurantOwnerException("Only the owner of the restaurant can manage its dishes"));
+
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .principal(ownerAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": true}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("Only the owner of the restaurant can manage its dishes"));
     }

@@ -30,6 +30,7 @@ class SecurityConfigurationTest {
     private static final String RESTAURANTS_URL = "/api/v1/restaurants";
     private static final String DISHES_URL = "/api/v1/dishes";
     private static final String DISH_URL = "/api/v1/dishes/7";
+    private static final String DISH_STATUS_URL = "/api/v1/dishes/7/status";
     private static final String AUTHORIZATION = "Authorization";
 
     @TestConfiguration
@@ -151,6 +152,33 @@ class SecurityConfigurationTest {
     @Test
     void patchDishWithOwnerTokenPassesSecurityAndReachesTheValidation() throws Exception {
         mockMvc.perform(patch(DISH_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "OWNER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void patchDishStatusWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": false}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void patchDishStatusWithAdminTokenReturns403() throws Exception {
+        mockMvc.perform(patch(DISH_STATUS_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\": false}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("You do not have permission to perform this action"));
+    }
+
+    @Test
+    void patchDishStatusWithOwnerTokenPassesSecurityAndReachesTheValidation() throws Exception {
+        mockMvc.perform(patch(DISH_STATUS_URL)
                         .header(AUTHORIZATION, bearerTokenFor(1L, "OWNER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
