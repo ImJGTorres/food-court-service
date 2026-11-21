@@ -11,7 +11,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
-import java.util.List;
 import java.util.Optional;
 
 @RequiredArgsConstructor
@@ -30,16 +29,7 @@ public class RestaurantJpaAdapter implements IRestaurantPersistencePort {
     public PageModel<RestaurantModel> findAllRestaurants(int page, int size) {
         Page<RestaurantEntity> restaurantPage = restaurantRepository
                 .findAll(PageRequest.of(page, size, Sort.by(NAME_FIELD).ascending()));
-        List<RestaurantModel> restaurants = restaurantPage
-                .getContent()
-                .stream()
-                .map(restaurantEntityMapper::toModel)
-                .toList();
-        return new PageModel<>(restaurants,
-                restaurantPage.getNumber(),
-                restaurantPage.getSize(),
-                restaurantPage.getTotalElements(),
-                restaurantPage.getTotalPages());
+        return PageModelConverter.toPageModel(restaurantPage, restaurantEntityMapper::toModel);
     }
 
     @Override
