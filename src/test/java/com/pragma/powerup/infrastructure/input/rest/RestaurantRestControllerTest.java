@@ -171,8 +171,9 @@ class RestaurantRestControllerTest {
     }
 
     @Test
-    void listRestaurantsReturns200WithOnlyTheNameAndLogoOfEachRestaurant() throws Exception {
+    void listRestaurantsReturns200WithTheIdNameAndLogoOfEachRestaurant() throws Exception {
         RestaurantSummaryResponseDto summary = new RestaurantSummaryResponseDto();
+        summary.setId(3L);
         summary.setName("Arepas de la 70");
         summary.setLogoUrl("https://logos.com/arepas.png");
         PageResponseDto<RestaurantSummaryResponseDto> response =
@@ -183,7 +184,7 @@ class RestaurantRestControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].name").value("Arepas de la 70"))
                 .andExpect(jsonPath("$.content[0].logoUrl").value("https://logos.com/arepas.png"))
-                .andExpect(jsonPath("$.content[0].id").doesNotExist())
+                .andExpect(jsonPath("$.content[0].id").value(3))
                 .andExpect(jsonPath("$.content[0].nit").doesNotExist())
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(10))
