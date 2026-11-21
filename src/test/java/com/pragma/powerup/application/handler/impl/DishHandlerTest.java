@@ -4,18 +4,26 @@ import com.pragma.powerup.application.dto.request.DishRequestDto;
 import com.pragma.powerup.application.dto.request.DishStatusRequestDto;
 import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
+import com.pragma.powerup.application.dto.response.DishSummaryResponseDto;
+import com.pragma.powerup.application.dto.response.PageResponseDto;
 import com.pragma.powerup.application.mapper.IDishRequestMapper;
 import com.pragma.powerup.application.mapper.IDishResponseMapper;
 import com.pragma.powerup.domain.api.IDishServicePort;
 import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
+import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.model.DishModel;
+import com.pragma.powerup.domain.model.PageModel;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
@@ -121,6 +129,36 @@ class DishHandlerTest {
 
         assertThrows(NotRestaurantOwnerException.class,
                 () -> dishHandler.updateDishStatus(DISH_ID, request, OWNER_ID));
+
+        verifyNoInteractions(dishResponseMapper);
+    }
+
+    @Test
+    void listDishesCallsServicePortAndCopiesThePageIntoTheResponse() {
+        List<DishModel> dishes = List.of(new DishModel(), new DishModel());
+        List<DishSummaryResponseDto> summaries = List.of(new DishSummaryResponseDto(), new DishSummaryResponseDto());
+        PageModel<DishModel> page = new PageModel<>(dishes, 1, 2, 5L, 3);
+        when(dishServicePort.listDishes(10L, 3L, 1, 2)).thenReturn(page);
+        when(dishResponseMapper.toSummaryList(dishes)).thenReturn(summaries);
+
+        PageResponseDto<DishSummaryResponseDto> result = dishHandler.listDishes(10L, 3L, 1, 2);
+
+        assertAll(
+                () -> assertSame(summaries, result.getContent()),
+                () -> assertEquals(1, result.getPage()),
+                () -> assertEquals(2, result.getSize()),
+                () -> assertEquals(5L, result.getTotalElements()),
+                () -> assertEquals(3, result.getTotalPages())
+        );
+        verify(dishServicePort).listDishes(10L, 3L, 1, 2);
+    }
+
+    @Test
+    void listDishesWhenServicePortThrowsPropagatesExceptionWithoutMappingResponse() {
+        when(dishServicePort.listDishes(99L, null, 0, 10))
+                .thenThrow(new RestaurantNotFoundException("The requested restaurant does not exist"));
+
+        assertThrows(RestaurantNotFoundException.class, () -> dishHandler.listDishes(99L, null, 0, 10));
 
         verifyNoInteractions(dishResponseMapper);
     }

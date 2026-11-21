@@ -4,11 +4,14 @@ import com.pragma.powerup.application.dto.request.DishRequestDto;
 import com.pragma.powerup.application.dto.request.DishStatusRequestDto;
 import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
+import com.pragma.powerup.application.dto.response.DishSummaryResponseDto;
+import com.pragma.powerup.application.dto.response.PageResponseDto;
 import com.pragma.powerup.application.handler.IDishHandler;
 import com.pragma.powerup.application.mapper.IDishRequestMapper;
 import com.pragma.powerup.application.mapper.IDishResponseMapper;
 import com.pragma.powerup.domain.api.IDishServicePort;
 import com.pragma.powerup.domain.model.DishModel;
+import com.pragma.powerup.domain.model.PageModel;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -39,5 +42,15 @@ public class DishHandler implements IDishHandler {
     public DishResponseDto updateDishStatus(Long dishId, DishStatusRequestDto dishStatusRequestDto, Long ownerId) {
         DishModel updatedDish = dishServicePort.updateDishStatus(dishId, dishStatusRequestDto.getActive(), ownerId);
         return dishResponseMapper.toResponse(updatedDish);
+    }
+
+    @Override
+    public PageResponseDto<DishSummaryResponseDto> listDishes(Long restaurantId, Long categoryId, int page, int size) {
+        PageModel<DishModel> dishPage = dishServicePort.listDishes(restaurantId, categoryId, page, size);
+        return new PageResponseDto<>(dishResponseMapper.toSummaryList(dishPage.getContent()),
+                dishPage.getPage(),
+                dishPage.getSize(),
+                dishPage.getTotalElements(),
+                dishPage.getTotalPages());
     }
 }
