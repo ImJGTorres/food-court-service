@@ -1,9 +1,12 @@
 package com.pragma.powerup.infrastructure.input.rest;
 
 import com.pragma.powerup.application.dto.request.RestaurantRequestDto;
+import com.pragma.powerup.application.dto.response.PageResponseDto;
 import com.pragma.powerup.application.dto.response.RestaurantResponseDto;
+import com.pragma.powerup.application.dto.response.RestaurantSummaryResponseDto;
 import com.pragma.powerup.application.handler.IRestaurantHandler;
 import com.pragma.powerup.domain.exception.InvalidOwnerException;
+import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.InvalidRestaurantNameException;
 import com.pragma.powerup.domain.exception.RestaurantAlreadyExistsException;
 import com.pragma.powerup.domain.exception.UserServiceUnavailableException;
@@ -18,9 +21,13 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -161,5 +168,61 @@ class RestaurantRestControllerTest {
                   "ownerId": 1
                 }
                 """.formatted(name, nit, phone);
+    }
+
+    @Test
+    void listRestaurantsReturns200WithOnlyTheNameAndLogoOfEachRestaurant() throws Exception {
+        RestaurantSummaryResponseDto summary = new RestaurantSummaryResponseDto();
+        summary.setName("Arepas de la 70");
+        summary.setLogoUrl("https://logos.com/arepas.png");
+        PageResponseDto<RestaurantSummaryResponseDto> response =
+                new PageResponseDto<>(List.of(summary), 0, 10, 1L, 1);
+        when(restaurantHandler.listRestaurants(0, 10)).thenReturn(response);
+
+        mockMvc.perform(get(RESTAURANTS_URL).param("page", "0").param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].name").value("Arepas de la 70"))
+                .andExpect(jsonPath("$.content[0].logoUrl").value("https://logos.com/arepas.png"))
+                .andExpect(jsonPath("$.content[0].id").doesNotExist())
+                .andExpect(jsonPath("$.content[0].nit").doesNotExist())
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
+    }
+
+    @Test
+    void listRestaurantsWithoutParametersUsesTheFirstPageAndTenElements() throws Exception {
+        mockMvc.perform(get(RESTAURANTS_URL))
+                .andExpect(status().isOk());
+
+        verify(restaurantHandler).listRestaurants(0, 10);
+    }
+
+    @Test
+    void listRestaurantsPassesThePageAndSizeOfTheUrlToTheHandler() throws Exception {
+        mockMvc.perform(get(RESTAURANTS_URL).param("page", "2").param("size", "5"))
+                .andExpect(status().isOk());
+
+        verify(restaurantHandler).listRestaurants(2, 5);
+    }
+
+    @Test
+    void listRestaurantsWithInvalidPaginationReturns400WithTheDomainMessage() throws Exception {
+        when(restaurantHandler.listRestaurants(0, 51))
+                .thenThrow(new InvalidPaginationException("The page size must be between 1 and 50"));
+
+        mockMvc.perform(get(RESTAURANTS_URL).param("size", "51"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("The page size must be between 1 and 50"));
+    }
+
+    @Test
+    void listRestaurantsWithANonNumericSizeReturns400WithAShortMessage() throws Exception {
+        mockMvc.perform(get(RESTAURANTS_URL).param("size", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'size'"));
+
+        verifyNoInteractions(restaurantHandler);
     }
 }
