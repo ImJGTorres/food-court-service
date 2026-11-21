@@ -13,6 +13,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfiguration {
     private static final String ADMIN_ROLE = "ADMIN";
     private static final String OWNER_ROLE = "OWNER";
+    private static final String CLIENT_ROLE = "CLIENT";
     private static final String RESTAURANTS_URL = "/api/v1/restaurants";
     private static final String DISHES_URL = "/api/v1/dishes/**";
     private static final String ERROR_URL = "/error";
@@ -30,6 +31,7 @@ public class SecurityConfiguration {
                         .requestMatchers(SWAGGER_URLS).permitAll()
                         .requestMatchers(ERROR_URL).permitAll()
                         .requestMatchers(HttpMethod.POST, RESTAURANTS_URL).hasRole(ADMIN_ROLE)
+                        .requestMatchers(HttpMethod.GET, RESTAURANTS_URL).hasRole(CLIENT_ROLE)
                         .requestMatchers(HttpMethod.POST, DISHES_URL).hasRole(OWNER_ROLE)
                         .requestMatchers(HttpMethod.PATCH, DISHES_URL).hasRole(OWNER_ROLE)
                         .anyRequest().authenticated())

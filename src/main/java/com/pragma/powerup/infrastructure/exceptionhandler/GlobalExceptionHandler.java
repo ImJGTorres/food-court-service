@@ -4,6 +4,7 @@ import com.pragma.powerup.domain.exception.CategoryNotFoundException;
 import com.pragma.powerup.domain.exception.DishAlreadyExistsException;
 import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.InvalidOwnerException;
+import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.InvalidRestaurantNameException;
 import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
 import com.pragma.powerup.domain.exception.RestaurantAlreadyExistsException;
@@ -36,7 +37,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
     }
 
-    @ExceptionHandler({InvalidRestaurantNameException.class, InvalidOwnerException.class})
+    @ExceptionHandler({InvalidRestaurantNameException.class, InvalidOwnerException.class,
+            InvalidPaginationException.class})
     public ResponseEntity<Map<String, String>> handleBadRequestException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
