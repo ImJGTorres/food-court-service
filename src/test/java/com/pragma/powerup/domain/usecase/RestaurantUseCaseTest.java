@@ -1,8 +1,10 @@
 package com.pragma.powerup.domain.usecase;
 
 import com.pragma.powerup.domain.exception.InvalidOwnerException;
+import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.InvalidRestaurantNameException;
 import com.pragma.powerup.domain.exception.RestaurantAlreadyExistsException;
+import com.pragma.powerup.domain.model.PageModel;
 import com.pragma.powerup.domain.model.RestaurantModel;
 import com.pragma.powerup.domain.spi.IRestaurantPersistencePort;
 import com.pragma.powerup.domain.spi.IUserClientPort;
@@ -12,19 +14,25 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+
 @ExtendWith(MockitoExtension.class)
 class RestaurantUseCaseTest {
     private static final Long OWNER_ID = 1L;
     private static final String NIT = "900111222";
+    private static final String NEGATIVE_PAGE_MESSAGE = "The page number cannot be negative";
+    private static final String INVALID_SIZE_MESSAGE = "The page size must be between 1 and 50";
 
     @Mock
     private IRestaurantPersistencePort restaurantPersistencePort;
@@ -95,5 +103,60 @@ class RestaurantUseCaseTest {
 
         assertEquals("The user is not an owner", exception.getMessage());
         verify(restaurantPersistencePort, never()).saveRestaurant(any());
+    }
+
+    @Test
+    void listRestaurantsReturnsThePageGivenByThePersistencePort() {
+        PageModel<RestaurantModel> expectedPage = new PageModel<>(
+                List.of(buildRestaurantNamed("Arepas"), buildRestaurantNamed("Burger")), 0, 10, 2L, 1);
+        when(restaurantPersistencePort.findAllRestaurants(0, 10)).thenReturn(expectedPage);
+
+        PageModel<RestaurantModel> result = restaurantUseCase.listRestaurants(0, 10);
+
+        assertSame(expectedPage, result);
+        verify(restaurantPersistencePort).findAllRestaurants(0, 10);
+    }
+
+    @Test
+    void listRestaurantsAcceptsTheSmallestPageSize() {
+        PageModel<RestaurantModel> expectedPage = new PageModel<>(List.of(), 0, 1, 0L, 0);
+        when(restaurantPersistencePort.findAllRestaurants(0, 1)).thenReturn(expectedPage);
+
+        assertSame(expectedPage, restaurantUseCase.listRestaurants(0, 1));
+    }
+
+    @Test
+    void listRestaurantsAcceptsTheBiggestPageSize() {
+        PageModel<RestaurantModel> expectedPage = new PageModel<>(List.of(), 0, 50, 0L, 0);
+        when(restaurantPersistencePort.findAllRestaurants(0, 50)).thenReturn(expectedPage);
+
+        assertSame(expectedPage, restaurantUseCase.listRestaurants(0, 50));
+    }
+
+    @Test
+    void listRestaurantsWithNegativePageThrowsInvalidPaginationException() {
+        InvalidPaginationException exception = assertThrows(
+                InvalidPaginationException.class, () -> restaurantUseCase.listRestaurants(-1, 10));
+
+        assertEquals(NEGATIVE_PAGE_MESSAGE, exception.getMessage());
+        verify(restaurantPersistencePort, never()).findAllRestaurants(anyInt(), anyInt());
+    }
+
+    @Test
+    void listRestaurantsWithPageSizeZeroThrowsInvalidPaginationException() {
+        InvalidPaginationException exception = assertThrows(
+                InvalidPaginationException.class, () -> restaurantUseCase.listRestaurants(0, 0));
+
+        assertEquals(INVALID_SIZE_MESSAGE, exception.getMessage());
+        verify(restaurantPersistencePort, never()).findAllRestaurants(anyInt(), anyInt());
+    }
+
+    @Test
+    void listRestaurantsWithPageSizeAboveTheLimitThrowsInvalidPaginationException() {
+        InvalidPaginationException exception = assertThrows(
+                InvalidPaginationException.class, () -> restaurantUseCase.listRestaurants(0, 51));
+
+        assertEquals(INVALID_SIZE_MESSAGE, exception.getMessage());
+        verify(restaurantPersistencePort, never()).findAllRestaurants(anyInt(), anyInt());
     }
 }

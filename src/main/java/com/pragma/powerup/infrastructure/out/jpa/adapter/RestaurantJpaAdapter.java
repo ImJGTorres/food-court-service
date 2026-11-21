@@ -1,5 +1,6 @@
 package com.pragma.powerup.infrastructure.out.jpa.adapter;
 
+import com.pragma.powerup.domain.model.PageModel;
 import com.pragma.powerup.domain.model.RestaurantModel;
 import com.pragma.powerup.domain.spi.IRestaurantPersistencePort;
 import com.pragma.powerup.infrastructure.out.jpa.entity.RestaurantEntity;
@@ -14,6 +15,11 @@ public class RestaurantJpaAdapter implements IRestaurantPersistencePort {
     @Override
     public Optional<RestaurantModel> findRestaurantById(Long id) {
         return restaurantRepository.findById(id).map(restaurantEntityMapper::toModel);
+    }
+
+    @Override
+    public PageModel<RestaurantModel> findAllRestaurants(int page, int size) {
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
     private final IRestaurantRepository restaurantRepository;
