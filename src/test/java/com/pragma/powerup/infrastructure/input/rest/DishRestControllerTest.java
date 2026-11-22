@@ -4,10 +4,13 @@ import com.pragma.powerup.application.dto.request.DishRequestDto;
 import com.pragma.powerup.application.dto.request.DishStatusRequestDto;
 import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
+import com.pragma.powerup.application.dto.response.DishSummaryResponseDto;
+import com.pragma.powerup.application.dto.response.PageResponseDto;
 import com.pragma.powerup.application.handler.IDishHandler;
 import com.pragma.powerup.domain.exception.CategoryNotFoundException;
 import com.pragma.powerup.domain.exception.DishAlreadyExistsException;
 import com.pragma.powerup.domain.exception.DishNotFoundException;
+import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.infrastructure.exceptionhandler.GlobalExceptionHandler;
@@ -29,9 +32,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -43,6 +48,7 @@ class DishRestControllerTest {
     private static final String DISH_URL = "/api/v1/dishes/7";
     private static final String DISH_STATUS_URL = "/api/v1/dishes/7/status";
     private static final Long TOKEN_USER_ID = 1L;
+    private static final String RESTAURANT_DISHES_URL = "/api/v1/restaurants/1/dishes";
 
     @Mock
     private IDishHandler dishHandler;
@@ -422,5 +428,86 @@ class DishRestControllerTest {
                   "restaurantId": 1
                 }
                 """.formatted(price);
+    }
+
+    @Test
+    void listDishesReturns200WithTheFieldsTheClientNeedsToChooseADish() throws Exception {
+        DishSummaryResponseDto summary = new DishSummaryResponseDto();
+        summary.setId(4L);
+        summary.setName("Hamburguesa");
+        summary.setPrice(15000);
+        summary.setDescription("Con queso");
+        summary.setImageUrl("https://img.com/burger.png");
+        summary.setCategoryName("ENTRADA");
+        when(dishHandler.listDishes(1L, null, 0, 10))
+                .thenReturn(new PageResponseDto<>(List.of(summary), 0, 10, 1L, 1));
+
+        mockMvc.perform(get(RESTAURANT_DISHES_URL))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(4))
+                .andExpect(jsonPath("$.content[0].name").value("Hamburguesa"))
+                .andExpect(jsonPath("$.content[0].price").value(15000))
+                .andExpect(jsonPath("$.content[0].description").value("Con queso"))
+                .andExpect(jsonPath("$.content[0].imageUrl").value("https://img.com/burger.png"))
+                .andExpect(jsonPath("$.content[0].categoryName").value("ENTRADA"))
+                .andExpect(jsonPath("$.content[0].active").doesNotExist())
+                .andExpect(jsonPath("$.content[0].restaurantId").doesNotExist())
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void listDishesWithoutParametersHasNoCategoryFilterAndUsesTheFirstPageOfTen() throws Exception {
+        mockMvc.perform(get(RESTAURANT_DISHES_URL))
+                .andExpect(status().isOk());
+
+        verify(dishHandler).listDishes(eq(1L), isNull(), eq(0), eq(10));
+    }
+
+    @Test
+    void listDishesPassesTheCategoryPageAndSizeOfTheUrlToTheHandler() throws Exception {
+        mockMvc.perform(get(RESTAURANT_DISHES_URL)
+                        .param("categoryId", "3").param("page", "2").param("size", "5"))
+                .andExpect(status().isOk());
+
+        verify(dishHandler).listDishes(1L, 3L, 2, 5);
+    }
+
+    @Test
+    void listDishesOfAMissingRestaurantReturns404() throws Exception {
+        when(dishHandler.listDishes(1L, null, 0, 10))
+                .thenThrow(new RestaurantNotFoundException("The requested restaurant does not exist"));
+
+        mockMvc.perform(get(RESTAURANT_DISHES_URL))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("The requested restaurant does not exist"));
+    }
+
+    @Test
+    void listDishesWithAMissingCategoryReturns404() throws Exception {
+        when(dishHandler.listDishes(1L, 99L, 0, 10))
+                .thenThrow(new CategoryNotFoundException("The requested category does not exist"));
+
+        mockMvc.perform(get(RESTAURANT_DISHES_URL).param("categoryId", "99"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("The requested category does not exist"));
+    }
+
+    @Test
+    void listDishesWithInvalidPaginationReturns400WithTheDomainMessage() throws Exception {
+        when(dishHandler.listDishes(1L, null, 0, 51))
+                .thenThrow(new InvalidPaginationException("The page size must be between 1 and 50"));
+
+        mockMvc.perform(get(RESTAURANT_DISHES_URL).param("size", "51"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("The page size must be between 1 and 50"));
+    }
+
+    @Test
+    void listDishesWithANonNumericCategoryReturns400WithAShortMessage() throws Exception {
+        mockMvc.perform(get(RESTAURANT_DISHES_URL).param("categoryId", "postres"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'categoryId'"));
+
+        verifyNoInteractions(dishHandler);
     }
 }

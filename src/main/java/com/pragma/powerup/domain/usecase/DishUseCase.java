@@ -8,6 +8,7 @@ import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.model.CategoryModel;
 import com.pragma.powerup.domain.model.DishModel;
+import com.pragma.powerup.domain.model.PageModel;
 import com.pragma.powerup.domain.model.RestaurantModel;
 import com.pragma.powerup.domain.spi.ICategoryPersistencePort;
 import com.pragma.powerup.domain.spi.IDishPersistencePort;
@@ -61,6 +62,16 @@ public class DishUseCase implements IDishServicePort {
         validateRestaurantOwner(dish.getRestaurant(), ownerId);
         dish.setActive(active);
         return dishPersistencePort.saveDish(dish);
+    }
+
+    @Override
+    public PageModel<DishModel> listDishes(Long restaurantId, Long categoryId, int page, int size) {
+        PaginationValidator.validate(page, size);
+        findRestaurant(restaurantId);
+        if (categoryId != null) {
+            findCategory(categoryId);
+        }
+        return dishPersistencePort.findActiveDishesByRestaurant(restaurantId, categoryId, page, size);
     }
 
     private RestaurantModel findRestaurant(Long restaurantId) {

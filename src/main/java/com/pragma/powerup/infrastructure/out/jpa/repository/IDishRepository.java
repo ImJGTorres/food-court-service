@@ -1,8 +1,15 @@
 package com.pragma.powerup.infrastructure.out.jpa.repository;
 
 import com.pragma.powerup.infrastructure.out.jpa.entity.DishEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface IDishRepository extends JpaRepository<DishEntity, Long> {
     boolean existsByNameIgnoreCaseAndRestaurantId(String name, Long restaurantId);
+
+    Page<DishEntity> findByRestaurantIdAndActiveTrue(Long restaurantId, Pageable pageable);
+
+    Page<DishEntity> findByRestaurantIdAndCategoryIdAndActiveTrue(Long restaurantId, Long categoryId,
+                                                                  Pageable pageable);
 }

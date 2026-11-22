@@ -16,6 +16,7 @@ public class SecurityConfiguration {
     private static final String CLIENT_ROLE = "CLIENT";
     private static final String RESTAURANTS_URL = "/api/v1/restaurants";
     private static final String DISHES_URL = "/api/v1/dishes/**";
+    private static final String RESTAURANT_DISHES_URL = "/api/v1/restaurants/*/dishes";
     private static final String ERROR_URL = "/error";
     private static final String[] SWAGGER_URLS = {"/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**"};
 
@@ -32,6 +33,7 @@ public class SecurityConfiguration {
                         .requestMatchers(ERROR_URL).permitAll()
                         .requestMatchers(HttpMethod.POST, RESTAURANTS_URL).hasRole(ADMIN_ROLE)
                         .requestMatchers(HttpMethod.GET, RESTAURANTS_URL).hasRole(CLIENT_ROLE)
+                        .requestMatchers(HttpMethod.GET, RESTAURANT_DISHES_URL).hasRole(CLIENT_ROLE)
                         .requestMatchers(HttpMethod.POST, DISHES_URL).hasRole(OWNER_ROLE)
                         .requestMatchers(HttpMethod.PATCH, DISHES_URL).hasRole(OWNER_ROLE)
                         .anyRequest().authenticated())

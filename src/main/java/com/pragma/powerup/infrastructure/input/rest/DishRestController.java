@@ -4,6 +4,8 @@ import com.pragma.powerup.application.dto.request.DishRequestDto;
 import com.pragma.powerup.application.dto.request.DishStatusRequestDto;
 import com.pragma.powerup.application.dto.request.DishUpdateRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
+import com.pragma.powerup.application.dto.response.DishSummaryResponseDto;
+import com.pragma.powerup.application.dto.response.PageResponseDto;
 import com.pragma.powerup.application.handler.IDishHandler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,17 +17,22 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class DishRestController {
+    private static final String DEFAULT_PAGE = "0";
+    private static final String DEFAULT_SIZE = "10";
+
     private final IDishHandler dishHandler;
 
     @Operation(summary = "Create a dish")
@@ -72,6 +79,25 @@ public class DishRestController {
     public ResponseEntity<DishResponseDto> updateDishStatus(@PathVariable Long id,
             @Valid @RequestBody DishStatusRequestDto dishStatusRequestDto, Authentication authentication) {
         return ResponseEntity.ok(dishHandler.updateDishStatus(id, dishStatusRequestDto, getUserId(authentication)));
+    }
+
+    @Operation(summary = "List the active dishes of a restaurant, page by page, optionally by category")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Page of active dishes sorted by name",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PageResponseDto.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid page, size or category", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Only a client can list dishes", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Restaurant or category not found", content = @Content)
+    })
+    @GetMapping(value = "/restaurants/{restaurantId}/dishes", produces = "application/json")
+    public ResponseEntity<PageResponseDto<DishSummaryResponseDto>> listDishes(
+            @PathVariable Long restaurantId,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(defaultValue = DEFAULT_PAGE) int page,
+            @RequestParam(defaultValue = DEFAULT_SIZE) int size) {
+        return ResponseEntity.ok(dishHandler.listDishes(restaurantId, categoryId, page, size));
     }
 
     private Long getUserId(Authentication authentication) {
