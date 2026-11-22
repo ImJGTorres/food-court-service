@@ -2,6 +2,7 @@ package com.pragma.powerup.infrastructure.out.jpa.adapter;
 
 import com.pragma.powerup.domain.model.OrderModel;
 import com.pragma.powerup.domain.model.OrderStatus;
+import com.pragma.powerup.domain.model.PageModel;
 import com.pragma.powerup.domain.spi.IOrderPersistencePort;
 import com.pragma.powerup.infrastructure.out.jpa.entity.OrderEntity;
 import com.pragma.powerup.infrastructure.out.jpa.mapper.IOrderEntityMapper;
@@ -24,5 +25,11 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
     @Override
     public boolean existsByClientIdAndStatusIn(Long clientId, List<OrderStatus> statuses) {
         return orderRepository.existsByClientIdAndStatusIn(clientId, statuses);
+    }
+
+    @Override
+    public PageModel<OrderModel> findOrdersByRestaurantAndStatus(Long restaurantId, OrderStatus status, int page,
+                                                                 int size) {
+        throw new UnsupportedOperationException("Implemented in step G2");
     }
 }

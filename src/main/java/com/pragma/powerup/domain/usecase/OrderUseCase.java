@@ -3,6 +3,7 @@ package com.pragma.powerup.domain.usecase;
 import com.pragma.powerup.domain.api.IOrderServicePort;
 import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
+import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
@@ -11,9 +12,11 @@ import com.pragma.powerup.domain.model.DishModel;
 import com.pragma.powerup.domain.model.OrderDishModel;
 import com.pragma.powerup.domain.model.OrderModel;
 import com.pragma.powerup.domain.model.OrderStatus;
+import com.pragma.powerup.domain.model.PageModel;
 import com.pragma.powerup.domain.model.RestaurantModel;
 import com.pragma.powerup.domain.spi.IDishPersistencePort;
 import com.pragma.powerup.domain.spi.IOrderPersistencePort;
+import com.pragma.powerup.domain.spi.IRestaurantEmployeePersistencePort;
 import com.pragma.powerup.domain.spi.IRestaurantPersistencePort;
 
 import java.time.LocalDateTime;
@@ -31,17 +34,21 @@ public class OrderUseCase implements IOrderServicePort {
     private static final String DISH_NOT_FOUND_MESSAGE = "The requested dish does not exist";
     private static final String DISH_NOT_FROM_RESTAURANT_MESSAGE = "The dish %d does not belong to the selected restaurant";
     private static final String INACTIVE_DISH_MESSAGE = "The dish %d is not available";
+    private static final String EMPLOYEE_NOT_ASSIGNED_MESSAGE = "The employee is not assigned to any restaurant";
 
     private final IOrderPersistencePort orderPersistencePort;
     private final IRestaurantPersistencePort restaurantPersistencePort;
     private final IDishPersistencePort dishPersistencePort;
+    private final IRestaurantEmployeePersistencePort restaurantEmployeePersistencePort;
 
     public OrderUseCase(IOrderPersistencePort orderPersistencePort,
                         IRestaurantPersistencePort restaurantPersistencePort,
-                        IDishPersistencePort dishPersistencePort) {
+                        IDishPersistencePort dishPersistencePort,
+                        IRestaurantEmployeePersistencePort restaurantEmployeePersistencePort) {
         this.orderPersistencePort = orderPersistencePort;
         this.restaurantPersistencePort = restaurantPersistencePort;
         this.dishPersistencePort = dishPersistencePort;
+        this.restaurantEmployeePersistencePort = restaurantEmployeePersistencePort;
     }
 
     @Override
@@ -57,6 +64,14 @@ public class OrderUseCase implements IOrderServicePort {
         orderModel.setDate(LocalDateTime.now(COLOMBIA_ZONE));
         orderModel.setStatus(OrderStatus.PENDING);
         return orderPersistencePort.saveOrder(orderModel);
+    }
+
+    @Override
+    public PageModel<OrderModel> listOrdersByStatus(Long employeeId, OrderStatus status, int page, int size) {
+        PaginationValidator.validate(page, size);
+        Long restaurantId = restaurantEmployeePersistencePort.findRestaurantIdByEmployeeId(employeeId)
+                .orElseThrow(() -> new EmployeeNotAssignedException(EMPLOYEE_NOT_ASSIGNED_MESSAGE));
+        return orderPersistencePort.findOrdersByRestaurantAndStatus(restaurantId, status, page, size);
     }
 
     private void validateNoOrderInProgress(Long clientId) {
