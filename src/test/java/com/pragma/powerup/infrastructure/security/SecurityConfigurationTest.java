@@ -32,6 +32,7 @@ class SecurityConfigurationTest {
     private static final String DISHES_URL = "/api/v1/dishes";
     private static final String DISH_URL = "/api/v1/dishes/7";
     private static final String DISH_STATUS_URL = "/api/v1/dishes/7/status";
+    private static final String RESTAURANT_DISHES_URL = "/api/v1/restaurants/1/dishes";
     private static final String AUTHORIZATION = "Authorization";
 
     @TestConfiguration
@@ -238,5 +239,35 @@ class SecurityConfigurationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getRestaurantDishesWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(get(RESTAURANT_DISHES_URL))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getRestaurantDishesWithAdminTokenReturns403() throws Exception {
+        mockMvc.perform(get(RESTAURANT_DISHES_URL).header(AUTHORIZATION, bearerTokenFor(1L, "ADMIN")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getRestaurantDishesWithOwnerTokenReturns403() throws Exception {
+        mockMvc.perform(get(RESTAURANT_DISHES_URL).header(AUTHORIZATION, bearerTokenFor(1L, "OWNER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getRestaurantDishesWithEmployeeTokenReturns403() throws Exception {
+        mockMvc.perform(get(RESTAURANT_DISHES_URL).header(AUTHORIZATION, bearerTokenFor(1L, "EMPLOYEE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getRestaurantDishesWithClientTokenReturns200() throws Exception {
+        mockMvc.perform(get(RESTAURANT_DISHES_URL).header(AUTHORIZATION, bearerTokenFor(1L, "CLIENT")))
+                .andExpect(status().isOk());
     }
 }
