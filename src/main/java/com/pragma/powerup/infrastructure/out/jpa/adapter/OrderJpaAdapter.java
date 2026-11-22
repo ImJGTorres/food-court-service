@@ -8,11 +8,15 @@ import com.pragma.powerup.infrastructure.out.jpa.entity.OrderEntity;
 import com.pragma.powerup.infrastructure.out.jpa.mapper.IOrderEntityMapper;
 import com.pragma.powerup.infrastructure.out.jpa.repository.IOrderRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.util.List;
 
 @RequiredArgsConstructor
 public class OrderJpaAdapter implements IOrderPersistencePort {
+    private static final String DATE_FIELD = "date";
+
     private final IOrderRepository orderRepository;
     private final IOrderEntityMapper orderEntityMapper;
 
@@ -30,6 +34,9 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
     @Override
     public PageModel<OrderModel> findOrdersByRestaurantAndStatus(Long restaurantId, OrderStatus status, int page,
                                                                  int size) {
-        throw new UnsupportedOperationException("Implemented in step G2");
+        return PageModelConverter.toPageModel(
+                orderRepository.findByRestaurantIdAndStatus(restaurantId, status,
+                        PageRequest.of(page, size, Sort.by(DATE_FIELD).ascending())),
+                orderEntityMapper::toModel);
     }
 }
