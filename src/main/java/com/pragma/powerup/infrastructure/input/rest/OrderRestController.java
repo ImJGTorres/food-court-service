@@ -2,7 +2,9 @@ package com.pragma.powerup.infrastructure.input.rest;
 
 import com.pragma.powerup.application.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.dto.response.OrderResponseDto;
+import com.pragma.powerup.application.dto.response.PageResponseDto;
 import com.pragma.powerup.application.handler.IOrderHandler;
+import com.pragma.powerup.domain.model.OrderStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -13,15 +15,20 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class OrderRestController {
+    private static final String DEFAULT_PAGE = "0";
+    private static final String DEFAULT_SIZE = "10";
+
     private final IOrderHandler orderHandler;
 
     @Operation(summary = "Place an order with dishes of one restaurant; it starts as PENDING")
@@ -43,6 +50,26 @@ public class OrderRestController {
                                                         Authentication authentication) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(orderHandler.createOrder(orderRequestDto, getUserId(authentication)));
+    }
+
+    @Operation(summary = "List the orders of the restaurant of the employee by status, from the oldest")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Page of orders with all their fields",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PageResponseDto.class))),
+            @ApiResponse(responseCode = "400", description = "Missing or invalid status, page or size",
+                    content = @Content),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "Only an employee assigned to a restaurant can list its orders", content = @Content)
+    })
+    @GetMapping(value = "/orders", produces = "application/json")
+    public ResponseEntity<PageResponseDto<OrderResponseDto>> listOrdersByStatus(
+            @RequestParam OrderStatus status,
+            @RequestParam(defaultValue = DEFAULT_PAGE) int page,
+            @RequestParam(defaultValue = DEFAULT_SIZE) int size,
+            Authentication authentication) {
+        return ResponseEntity.ok(orderHandler.listOrdersByStatus(getUserId(authentication), status, page, size));
     }
 
     private Long getUserId(Authentication authentication) {

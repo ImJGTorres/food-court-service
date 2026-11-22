@@ -14,6 +14,7 @@ public class SecurityConfiguration {
     private static final String ADMIN_ROLE = "ADMIN";
     private static final String OWNER_ROLE = "OWNER";
     private static final String CLIENT_ROLE = "CLIENT";
+    private static final String EMPLOYEE_ROLE = "EMPLOYEE";
     private static final String RESTAURANTS_URL = "/api/v1/restaurants";
     private static final String DISHES_URL = "/api/v1/dishes/**";
     private static final String RESTAURANT_DISHES_URL = "/api/v1/restaurants/*/dishes";
@@ -39,6 +40,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, DISHES_URL).hasRole(OWNER_ROLE)
                         .requestMatchers(HttpMethod.PATCH, DISHES_URL).hasRole(OWNER_ROLE)
                         .requestMatchers(HttpMethod.POST, ORDERS_URL).hasRole(CLIENT_ROLE)
+                        .requestMatchers(HttpMethod.GET, ORDERS_URL).hasRole(EMPLOYEE_ROLE)
                         .requestMatchers(HttpMethod.POST, RESTAURANT_EMPLOYEES_URL).hasRole(OWNER_ROLE)
                         .anyRequest().authenticated())
                 .addFilterBefore(new JwtAuthenticationFilter(jwtTokenParser),

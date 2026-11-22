@@ -10,8 +10,10 @@ import java.util.List;
 @Setter
 public class OrderResponseDto {
     private Long id;
+    private Long clientId;
     private Long restaurantId;
     private LocalDateTime date;
     private String status;
+    private Long employeeId;
     private List<OrderDishResponseDto> dishes;
 }

@@ -3,13 +3,17 @@ package com.pragma.powerup.infrastructure.input.rest;
 import com.pragma.powerup.application.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.dto.response.OrderDishResponseDto;
 import com.pragma.powerup.application.dto.response.OrderResponseDto;
+import com.pragma.powerup.application.dto.response.PageResponseDto;
 import com.pragma.powerup.application.handler.IOrderHandler;
 import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
+import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
+import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
+import com.pragma.powerup.domain.model.OrderStatus;
 import com.pragma.powerup.infrastructure.exceptionhandler.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,8 +32,10 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderRestControllerTest {
     private static final String ORDERS_URL = "/api/v1/orders";
     private static final Long TOKEN_CLIENT_ID = 20L;
+    private static final Long TOKEN_EMPLOYEE_ID = 24L;
     private static final String VALID_ORDER_JSON = """
             {
               "restaurantId": 1,
@@ -56,6 +63,7 @@ class OrderRestControllerTest {
 
     private MockMvc mockMvc;
     private Authentication clientAuthentication;
+    private Authentication employeeAuthentication;
 
     @BeforeEach
     void setUp() {
@@ -63,6 +71,7 @@ class OrderRestControllerTest {
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         clientAuthentication = new UsernamePasswordAuthenticationToken(TOKEN_CLIENT_ID, null, List.of());
+        employeeAuthentication = new UsernamePasswordAuthenticationToken(TOKEN_EMPLOYEE_ID, null, List.of());
     }
 
     @Test
@@ -73,6 +82,7 @@ class OrderRestControllerTest {
         dish.setQuantity(2);
         OrderResponseDto response = new OrderResponseDto();
         response.setId(1L);
+        response.setClientId(TOKEN_CLIENT_ID);
         response.setRestaurantId(1L);
         response.setDate(LocalDateTime.of(2026, 11, 22, 10, 15, 30));
         response.setStatus("PENDING");
@@ -91,7 +101,8 @@ class OrderRestControllerTest {
                 .andExpect(jsonPath("$.dishes[0].dishId").value(4))
                 .andExpect(jsonPath("$.dishes[0].name").value("Hamburguesa"))
                 .andExpect(jsonPath("$.dishes[0].quantity").value(2))
-                .andExpect(jsonPath("$.clientId").doesNotExist());
+                .andExpect(jsonPath("$.clientId").value(20))
+                .andExpect(jsonPath("$.employeeId").doesNotExist());
     }
 
     @Test
@@ -220,5 +231,80 @@ class OrderRestControllerTest {
 
     private void whenTheHandlerThrows(RuntimeException exception) {
         when(orderHandler.createOrder(any(OrderRequestDto.class), eq(TOKEN_CLIENT_ID))).thenThrow(exception);
+    }
+
+    @Test
+    void listOrdersByStatusReturns200WithAllTheFieldsOfEachOrder() throws Exception {
+        OrderDishResponseDto dish = new OrderDishResponseDto();
+        dish.setDishId(4L);
+        dish.setName("Hamburguesa");
+        dish.setQuantity(2);
+        OrderResponseDto order = new OrderResponseDto();
+        order.setId(1L);
+        order.setClientId(21L);
+        order.setRestaurantId(1L);
+        order.setDate(LocalDateTime.of(2026, 11, 22, 10, 38, 42));
+        order.setStatus("PENDING");
+        order.setDishes(List.of(dish));
+        when(orderHandler.listOrdersByStatus(TOKEN_EMPLOYEE_ID, OrderStatus.PENDING, 0, 10))
+                .thenReturn(new PageResponseDto<>(List.of(order), 0, 10, 1L, 1));
+
+        mockMvc.perform(get(ORDERS_URL).principal(employeeAuthentication).param("status", "PENDING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.content[0].clientId").value(21))
+                .andExpect(jsonPath("$.content[0].restaurantId").value(1))
+                .andExpect(jsonPath("$.content[0].date").exists())
+                .andExpect(jsonPath("$.content[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.content[0].dishes[0].name").value("Hamburguesa"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void listOrdersByStatusPassesTheEmployeeOfTheTokenTheStatusAndThePageToTheHandler() throws Exception {
+        mockMvc.perform(get(ORDERS_URL).principal(employeeAuthentication)
+                        .param("status", "READY").param("page", "2").param("size", "5"))
+                .andExpect(status().isOk());
+
+        verify(orderHandler).listOrdersByStatus(TOKEN_EMPLOYEE_ID, OrderStatus.READY, 2, 5);
+    }
+
+    @Test
+    void listOrdersWithoutStatusReturns400WithAShortMessage() throws Exception {
+        mockMvc.perform(get(ORDERS_URL).principal(employeeAuthentication))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Missing required parameter 'status'"));
+
+        verifyNoInteractions(orderHandler);
+    }
+
+    @Test
+    void listOrdersWithAStatusThatDoesNotExistReturns400WithAShortMessage() throws Exception {
+        mockMvc.perform(get(ORDERS_URL).principal(employeeAuthentication).param("status", "LISTO"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'status'"));
+
+        verifyNoInteractions(orderHandler);
+    }
+
+    @Test
+    void listOrdersWhenTheEmployeeIsNotAssignedReturns403() throws Exception {
+        when(orderHandler.listOrdersByStatus(TOKEN_EMPLOYEE_ID, OrderStatus.PENDING, 0, 10))
+                .thenThrow(new EmployeeNotAssignedException("The employee is not assigned to any restaurant"));
+
+        mockMvc.perform(get(ORDERS_URL).principal(employeeAuthentication).param("status", "PENDING"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("The employee is not assigned to any restaurant"));
+    }
+
+    @Test
+    void listOrdersWithInvalidPaginationReturns400() throws Exception {
+        when(orderHandler.listOrdersByStatus(TOKEN_EMPLOYEE_ID, OrderStatus.PENDING, 0, 51))
+                .thenThrow(new InvalidPaginationException("The page size must be between 1 and 50"));
+
+        mockMvc.perform(get(ORDERS_URL).principal(employeeAuthentication)
+                        .param("status", "PENDING").param("size", "51"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("The page size must be between 1 and 50"));
     }
 }

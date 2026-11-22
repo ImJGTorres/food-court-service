@@ -378,4 +378,47 @@ class SecurityConfigurationTest {
                         .content("{}"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void getOrdersWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(get(ORDERS_URL).param("status", "PENDING"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getOrdersWithClientTokenReturns403() throws Exception {
+        mockMvc.perform(get(ORDERS_URL).param("status", "PENDING")
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "CLIENT")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getOrdersWithOwnerTokenReturns403() throws Exception {
+        mockMvc.perform(get(ORDERS_URL).param("status", "PENDING")
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "OWNER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getOrdersWithAdminTokenReturns403() throws Exception {
+        mockMvc.perform(get(ORDERS_URL).param("status", "PENDING")
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "ADMIN")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getOrdersWithEmployeeTokenReturns200() throws Exception {
+        mockMvc.perform(get(ORDERS_URL).param("status", "PENDING")
+                        .header(AUTHORIZATION, bearerTokenFor(24L, "EMPLOYEE")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void postOrdersWithEmployeeTokenIsStillForbiddenBecauseOnlyClientsPlaceOrders() throws Exception {
+        mockMvc.perform(post(ORDERS_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(24L, "EMPLOYEE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
 }
