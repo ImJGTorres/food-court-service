@@ -2,9 +2,13 @@ package com.pragma.powerup.infrastructure.security;
 
 import com.pragma.powerup.application.dto.request.DishRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
+import com.pragma.powerup.application.dto.request.OrderRequestDto;
+import com.pragma.powerup.application.dto.response.OrderResponseDto;
 import com.pragma.powerup.application.handler.IDishHandler;
+import com.pragma.powerup.application.handler.IOrderHandler;
 import com.pragma.powerup.application.handler.IRestaurantHandler;
 import com.pragma.powerup.infrastructure.input.rest.DishRestController;
+import com.pragma.powerup.infrastructure.input.rest.OrderRestController;
 import com.pragma.powerup.infrastructure.input.rest.RestaurantRestController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {DishRestController.class, RestaurantRestController.class})
+@WebMvcTest(controllers = {DishRestController.class, RestaurantRestController.class, OrderRestController.class})
 @Import({SecurityConfiguration.class, SecurityConfigurationTest.JwtTestConfiguration.class})
 class SecurityConfigurationTest {
     private static final String RESTAURANTS_URL = "/api/v1/restaurants";
@@ -33,6 +37,7 @@ class SecurityConfigurationTest {
     private static final String DISH_URL = "/api/v1/dishes/7";
     private static final String DISH_STATUS_URL = "/api/v1/dishes/7/status";
     private static final String RESTAURANT_DISHES_URL = "/api/v1/restaurants/1/dishes";
+    private static final String ORDERS_URL = "/api/v1/orders";
     private static final String AUTHORIZATION = "Authorization";
 
     @TestConfiguration
@@ -51,6 +56,9 @@ class SecurityConfigurationTest {
 
     @MockitoBean
     private IRestaurantHandler restaurantHandler;
+
+    @MockitoBean
+    private IOrderHandler orderHandler;
 
     private String bearerTokenFor(Long userId, String role) {
         return "Bearer " + JwtTestTokens.tokenFor(JwtTestTokens.SECRET, userId, role);
@@ -269,5 +277,63 @@ class SecurityConfigurationTest {
     void getRestaurantDishesWithClientTokenReturns200() throws Exception {
         mockMvc.perform(get(RESTAURANT_DISHES_URL).header(AUTHORIZATION, bearerTokenFor(1L, "CLIENT")))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void postOrdersWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(post(ORDERS_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void postOrdersWithAdminTokenReturns403() throws Exception {
+        mockMvc.perform(post(ORDERS_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void postOrdersWithOwnerTokenReturns403() throws Exception {
+        mockMvc.perform(post(ORDERS_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "OWNER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void postOrdersWithEmployeeTokenReturns403() throws Exception {
+        mockMvc.perform(post(ORDERS_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "EMPLOYEE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void postOrdersWithClientTokenPassesSecurityAndReachesTheValidation() throws Exception {
+        mockMvc.perform(post(ORDERS_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "CLIENT"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void postOrdersGivesTheHandlerTheUserIdOfTheTokenAsClientId() throws Exception {
+        OrderResponseDto response = new OrderResponseDto();
+        response.setId(1L);
+        when(orderHandler.createOrder(any(OrderRequestDto.class), eq(20L))).thenReturn(response);
+
+        mockMvc.perform(post(ORDERS_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(20L, "CLIENT"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"restaurantId\": 1, \"dishes\": [{\"dishId\": 4, \"quantity\": 1}]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1));
     }
 }

@@ -3,10 +3,14 @@ package com.pragma.powerup.infrastructure.exceptionhandler;
 import com.pragma.powerup.domain.exception.CategoryNotFoundException;
 import com.pragma.powerup.domain.exception.DishAlreadyExistsException;
 import com.pragma.powerup.domain.exception.DishNotFoundException;
+import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
+import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.InvalidOwnerException;
 import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.InvalidRestaurantNameException;
 import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
+import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantAlreadyExistsException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.exception.UserServiceUnavailableException;
@@ -38,7 +42,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({InvalidRestaurantNameException.class, InvalidOwnerException.class,
-            InvalidPaginationException.class})
+            InvalidPaginationException.class, RepeatedDishException.class,
+            DishNotFromRestaurantException.class, InactiveDishException.class})
     public ResponseEntity<Map<String, String>> handleBadRequestException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
@@ -52,6 +57,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DishAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleDishAlreadyExistsException(
             DishAlreadyExistsException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
+    }
+
+    @ExceptionHandler(OrderInProgressException.class)
+    public ResponseEntity<Map<String, String>> handleOrderInProgressException(OrderInProgressException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
 
