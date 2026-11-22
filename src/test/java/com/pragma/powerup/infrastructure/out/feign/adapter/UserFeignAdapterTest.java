@@ -74,4 +74,34 @@ class UserFeignAdapterTest {
 
         assertEquals("The users service is not available", exception.getMessage());
     }
+
+    @Test
+    void isEmployeeWhenUserHasEmployeeRoleReturnsTrue() {
+        when(userFeignClient.getUserById(USER_ID)).thenReturn(buildUserWithRole("EMPLOYEE"));
+
+        assertTrue(userFeignAdapter.isEmployee(USER_ID));
+    }
+
+    @Test
+    void isEmployeeWhenUserHasAnotherRoleReturnsFalse() {
+        when(userFeignClient.getUserById(USER_ID)).thenReturn(buildUserWithRole("CLIENT"));
+
+        assertFalse(userFeignAdapter.isEmployee(USER_ID));
+    }
+
+    @Test
+    void isEmployeeWhenUsersServiceRespondsNotFoundReturnsFalse() {
+        when(userFeignClient.getUserById(USER_ID)).thenThrow(
+                new FeignException.NotFound("not found", buildRequest(), null, Collections.emptyMap()));
+
+        assertFalse(userFeignAdapter.isEmployee(USER_ID));
+    }
+
+    @Test
+    void isEmployeeWhenUsersServiceFailsThrowsUserServiceUnavailableException() {
+        when(userFeignClient.getUserById(USER_ID)).thenThrow(
+                new FeignException.InternalServerError("error", buildRequest(), null, Collections.emptyMap()));
+
+        assertThrows(UserServiceUnavailableException.class, () -> userFeignAdapter.isEmployee(USER_ID));
+    }
 }

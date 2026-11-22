@@ -4,7 +4,9 @@ import com.pragma.powerup.domain.exception.CategoryNotFoundException;
 import com.pragma.powerup.domain.exception.DishAlreadyExistsException;
 import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
+import com.pragma.powerup.domain.exception.EmployeeAlreadyAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
+import com.pragma.powerup.domain.exception.InvalidEmployeeException;
 import com.pragma.powerup.domain.exception.InvalidOwnerException;
 import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.InvalidRestaurantNameException;
@@ -43,7 +45,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({InvalidRestaurantNameException.class, InvalidOwnerException.class,
             InvalidPaginationException.class, RepeatedDishException.class,
-            DishNotFromRestaurantException.class, InactiveDishException.class})
+            DishNotFromRestaurantException.class, InactiveDishException.class, InvalidEmployeeException.class})
     public ResponseEntity<Map<String, String>> handleBadRequestException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
@@ -62,6 +64,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(OrderInProgressException.class)
     public ResponseEntity<Map<String, String>> handleOrderInProgressException(OrderInProgressException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
+    }
+
+    @ExceptionHandler(EmployeeAlreadyAssignedException.class)
+    public ResponseEntity<Map<String, String>> handleEmployeeAlreadyAssignedException(
+            EmployeeAlreadyAssignedException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
 

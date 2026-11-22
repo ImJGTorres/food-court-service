@@ -10,15 +10,25 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class UserFeignAdapter implements IUserClientPort {
     private static final String OWNER_ROLE = "OWNER";
+    private static final String EMPLOYEE_ROLE = "EMPLOYEE";
     private static final String USER_SERVICE_UNAVAILABLE_MESSAGE = "The users service is not available";
 
     private final IUserFeignClient userFeignClient;
 
     @Override
     public boolean isOwner(Long userId) {
+        return hasRole(userId, OWNER_ROLE);
+    }
+
+    @Override
+    public boolean isEmployee(Long userId) {
+        return hasRole(userId, EMPLOYEE_ROLE);
+    }
+
+    private boolean hasRole(Long userId, String role) {
         try {
             UserFeignResponse user = userFeignClient.getUserById(userId);
-            return OWNER_ROLE.equals(user.getRole());
+            return role.equals(user.getRole());
         } catch (FeignException.NotFound exception) {
             return false;
         } catch (FeignException exception) {

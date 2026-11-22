@@ -6,9 +6,11 @@ import com.pragma.powerup.application.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.dto.response.OrderResponseDto;
 import com.pragma.powerup.application.handler.IDishHandler;
 import com.pragma.powerup.application.handler.IOrderHandler;
+import com.pragma.powerup.application.handler.IRestaurantEmployeeHandler;
 import com.pragma.powerup.application.handler.IRestaurantHandler;
 import com.pragma.powerup.infrastructure.input.rest.DishRestController;
 import com.pragma.powerup.infrastructure.input.rest.OrderRestController;
+import com.pragma.powerup.infrastructure.input.rest.RestaurantEmployeeRestController;
 import com.pragma.powerup.infrastructure.input.rest.RestaurantRestController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,7 +31,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {DishRestController.class, RestaurantRestController.class, OrderRestController.class})
+@WebMvcTest(controllers = {DishRestController.class, RestaurantRestController.class, OrderRestController.class,
+        RestaurantEmployeeRestController.class})
 @Import({SecurityConfiguration.class, SecurityConfigurationTest.JwtTestConfiguration.class})
 class SecurityConfigurationTest {
     private static final String RESTAURANTS_URL = "/api/v1/restaurants";
@@ -38,6 +41,7 @@ class SecurityConfigurationTest {
     private static final String DISH_STATUS_URL = "/api/v1/dishes/7/status";
     private static final String RESTAURANT_DISHES_URL = "/api/v1/restaurants/1/dishes";
     private static final String ORDERS_URL = "/api/v1/orders";
+    private static final String RESTAURANT_EMPLOYEES_URL = "/api/v1/restaurants/1/employees";
     private static final String AUTHORIZATION = "Authorization";
 
     @TestConfiguration
@@ -59,6 +63,9 @@ class SecurityConfigurationTest {
 
     @MockitoBean
     private IOrderHandler orderHandler;
+
+    @MockitoBean
+    private IRestaurantEmployeeHandler restaurantEmployeeHandler;
 
     private String bearerTokenFor(Long userId, String role) {
         return "Bearer " + JwtTestTokens.tokenFor(JwtTestTokens.SECRET, userId, role);
@@ -335,5 +342,40 @@ class SecurityConfigurationTest {
                         .content("{\"restaurantId\": 1, \"dishes\": [{\"dishId\": 4, \"quantity\": 1}]}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    void postRestaurantEmployeesWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(post(RESTAURANT_EMPLOYEES_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void postRestaurantEmployeesWithAdminTokenReturns403() throws Exception {
+        mockMvc.perform(post(RESTAURANT_EMPLOYEES_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void postRestaurantEmployeesWithClientTokenReturns403() throws Exception {
+        mockMvc.perform(post(RESTAURANT_EMPLOYEES_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "CLIENT"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void postRestaurantEmployeesWithOwnerTokenPassesSecurityAndReachesTheValidation() throws Exception {
+        mockMvc.perform(post(RESTAURANT_EMPLOYEES_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(1L, "OWNER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
     }
 }
