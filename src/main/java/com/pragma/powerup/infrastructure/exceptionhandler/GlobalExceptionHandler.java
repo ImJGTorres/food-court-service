@@ -5,6 +5,7 @@ import com.pragma.powerup.domain.exception.DishAlreadyExistsException;
 import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
 import com.pragma.powerup.domain.exception.EmployeeAlreadyAssignedException;
+import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.InvalidEmployeeException;
 import com.pragma.powerup.domain.exception.InvalidOwnerException;
@@ -20,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -33,6 +35,7 @@ public class GlobalExceptionHandler {
     private static final String MESSAGE = "message";
     private static final String INVALID_PARAMETER_MESSAGE = "Invalid value for parameter '%s'";
     private static final String MALFORMED_REQUEST_MESSAGE = "Malformed or invalid JSON request";
+    private static final String MISSING_PARAMETER_MESSAGE = "Missing required parameter '%s'";
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationException(
@@ -84,14 +87,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
 
-    @ExceptionHandler(NotRestaurantOwnerException.class)
-    public ResponseEntity<Map<String, String>> handleNotRestaurantOwnerException(NotRestaurantOwnerException exception) {
+    @ExceptionHandler({NotRestaurantOwnerException.class, EmployeeNotAssignedException.class})
+    public ResponseEntity<Map<String, String>> handleForbiddenException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Map<String, String>> handleTypeMismatchException(MethodArgumentTypeMismatchException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap(MESSAGE, String.format(INVALID_PARAMETER_MESSAGE, exception.getName())));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Map<String, String>> handleMissingParameterException(
+            MissingServletRequestParameterException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Collections.singletonMap(MESSAGE, String.format(MISSING_PARAMETER_MESSAGE, exception.getParameterName())));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
