@@ -25,4 +25,9 @@ public class UserFeignAdapter implements IUserClientPort {
             throw new UserServiceUnavailableException(USER_SERVICE_UNAVAILABLE_MESSAGE);
         }
     }
+
+    @Override
+    public boolean isEmployee(Long userId) {
+        throw new UnsupportedOperationException("Implemented in step F3");
+    }
 }
