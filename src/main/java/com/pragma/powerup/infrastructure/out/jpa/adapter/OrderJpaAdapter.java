@@ -12,6 +12,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 import java.util.List;
+import java.util.Optional;
 
 @RequiredArgsConstructor
 public class OrderJpaAdapter implements IOrderPersistencePort {
@@ -38,5 +39,10 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
                 orderRepository.findByRestaurantIdAndStatus(restaurantId, status,
                         PageRequest.of(page, size, Sort.by(DATE_FIELD).ascending())),
                 orderEntityMapper::toModel);
+    }
+
+    @Override
+    public Optional<OrderModel> findOrderById(Long orderId) {
+        throw new UnsupportedOperationException("Implemented in step H2");
     }
 }

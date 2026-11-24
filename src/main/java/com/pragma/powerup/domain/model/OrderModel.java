@@ -20,4 +20,5 @@ public class OrderModel {
     private OrderStatus status;
     private Long employeeId;
     private List<OrderDishModel> dishes;
+    private Long version;
 }

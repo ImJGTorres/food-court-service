@@ -6,6 +6,9 @@ import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderNotFoundException;
+import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
+import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.model.DishModel;
@@ -35,6 +38,10 @@ public class OrderUseCase implements IOrderServicePort {
     private static final String DISH_NOT_FROM_RESTAURANT_MESSAGE = "The dish %d does not belong to the selected restaurant";
     private static final String INACTIVE_DISH_MESSAGE = "The dish %d is not available";
     private static final String EMPLOYEE_NOT_ASSIGNED_MESSAGE = "The employee is not assigned to any restaurant";
+    private static final String ORDER_NOT_FOUND_MESSAGE = "The requested order does not exist";
+    private static final String ORDER_NOT_FROM_EMPLOYEE_RESTAURANT_MESSAGE =
+            "The order does not belong to the restaurant of the employee";
+    private static final String ORDER_NOT_PENDING_MESSAGE = "Only pending orders can be assigned";
 
     private final IOrderPersistencePort orderPersistencePort;
     private final IRestaurantPersistencePort restaurantPersistencePort;
@@ -69,9 +76,28 @@ public class OrderUseCase implements IOrderServicePort {
     @Override
     public PageModel<OrderModel> listOrdersByStatus(Long employeeId, OrderStatus status, int page, int size) {
         PaginationValidator.validate(page, size);
-        Long restaurantId = restaurantEmployeePersistencePort.findRestaurantIdByEmployeeId(employeeId)
-                .orElseThrow(() -> new EmployeeNotAssignedException(EMPLOYEE_NOT_ASSIGNED_MESSAGE));
+        Long restaurantId = findRestaurantIdOfEmployee(employeeId);
         return orderPersistencePort.findOrdersByRestaurantAndStatus(restaurantId, status, page, size);
+    }
+
+    @Override
+    public OrderModel assignOrder(Long orderId, Long employeeId) {
+        OrderModel order = orderPersistencePort.findOrderById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(ORDER_NOT_FOUND_MESSAGE));
+        if (!order.getRestaurant().getId().equals(findRestaurantIdOfEmployee(employeeId))) {
+            throw new OrderNotFromEmployeeRestaurantException(ORDER_NOT_FROM_EMPLOYEE_RESTAURANT_MESSAGE);
+        }
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new OrderNotPendingException(ORDER_NOT_PENDING_MESSAGE);
+        }
+        order.setEmployeeId(employeeId);
+        order.setStatus(OrderStatus.IN_PREPARATION);
+        return orderPersistencePort.saveOrder(order);
+    }
+
+    private Long findRestaurantIdOfEmployee(Long employeeId) {
+        return restaurantEmployeePersistencePort.findRestaurantIdByEmployeeId(employeeId)
+                .orElseThrow(() -> new EmployeeNotAssignedException(EMPLOYEE_NOT_ASSIGNED_MESSAGE));
     }
 
     private void validateNoOrderInProgress(Long clientId) {

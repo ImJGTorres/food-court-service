@@ -6,6 +6,9 @@ import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderNotFoundException;
+import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
+import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.model.DishModel;
@@ -51,6 +54,7 @@ class OrderUseCaseTest {
     private static final Long BURGER_ID = 4L;
     private static final Long PIZZA_ID = 5L;
     private static final Long EMPLOYEE_ID = 24L;
+    private static final Long ORDER_ID = 1L;
     private static final List<OrderStatus> IN_PROGRESS_STATUSES =
             List.of(OrderStatus.PENDING, OrderStatus.IN_PREPARATION, OrderStatus.READY);
 
@@ -249,5 +253,99 @@ class OrderUseCaseTest {
                 () -> orderUseCase.listOrdersByStatus(EMPLOYEE_ID, OrderStatus.PENDING, -1, 10));
 
         verifyNoInteractions(restaurantEmployeePersistencePort, orderPersistencePort);
+    }
+
+    private OrderModel buildExistingOrder(Long restaurantId, OrderStatus status) {
+        OrderModel order = new OrderModel();
+        order.setId(ORDER_ID);
+        order.setRestaurant(buildRestaurant(restaurantId));
+        order.setStatus(status);
+        return order;
+    }
+
+    @Test
+    void assignOrderSetsTheEmployeeOfTheTokenAndMovesThePendingOrderToInPreparation() {
+        OrderModel order = buildExistingOrder(RESTAURANT_ID, OrderStatus.PENDING);
+        OrderModel savedOrder = new OrderModel();
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(restaurantEmployeePersistencePort.findRestaurantIdByEmployeeId(EMPLOYEE_ID))
+                .thenReturn(Optional.of(RESTAURANT_ID));
+        when(orderPersistencePort.saveOrder(any(OrderModel.class))).thenReturn(savedOrder);
+
+        OrderModel result = orderUseCase.assignOrder(ORDER_ID, EMPLOYEE_ID);
+
+        assertSame(savedOrder, result);
+        ArgumentCaptor<OrderModel> orderCaptor = ArgumentCaptor.forClass(OrderModel.class);
+        verify(orderPersistencePort).saveOrder(orderCaptor.capture());
+        assertAll(
+                () -> assertEquals(ORDER_ID, orderCaptor.getValue().getId()),
+                () -> assertEquals(EMPLOYEE_ID, orderCaptor.getValue().getEmployeeId()),
+                () -> assertEquals(OrderStatus.IN_PREPARATION, orderCaptor.getValue().getStatus())
+        );
+    }
+
+    @Test
+    void assignAMissingOrderThrowsOrderNotFoundExceptionWithoutLookingForTheEmployee() {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.empty());
+
+        OrderNotFoundException exception = assertThrows(OrderNotFoundException.class,
+                () -> orderUseCase.assignOrder(ORDER_ID, EMPLOYEE_ID));
+
+        assertEquals("The requested order does not exist", exception.getMessage());
+        verifyNoInteractions(restaurantEmployeePersistencePort);
+        verify(orderPersistencePort, never()).saveOrder(any());
+    }
+
+    @Test
+    void assignOrderWhenTheEmployeeIsNotAssignedToARestaurantThrowsEmployeeNotAssignedException() {
+        when(orderPersistencePort.findOrderById(ORDER_ID))
+                .thenReturn(Optional.of(buildExistingOrder(RESTAURANT_ID, OrderStatus.PENDING)));
+        when(restaurantEmployeePersistencePort.findRestaurantIdByEmployeeId(EMPLOYEE_ID)).thenReturn(Optional.empty());
+
+        assertThrows(EmployeeNotAssignedException.class, () -> orderUseCase.assignOrder(ORDER_ID, EMPLOYEE_ID));
+
+        verify(orderPersistencePort, never()).saveOrder(any());
+    }
+
+    @Test
+    void assignAnOrderOfAnotherRestaurantThrowsOrderNotFromEmployeeRestaurantException() {
+        when(orderPersistencePort.findOrderById(ORDER_ID))
+                .thenReturn(Optional.of(buildExistingOrder(OTHER_RESTAURANT_ID, OrderStatus.PENDING)));
+        when(restaurantEmployeePersistencePort.findRestaurantIdByEmployeeId(EMPLOYEE_ID))
+                .thenReturn(Optional.of(RESTAURANT_ID));
+
+        OrderNotFromEmployeeRestaurantException exception = assertThrows(
+                OrderNotFromEmployeeRestaurantException.class, () -> orderUseCase.assignOrder(ORDER_ID, EMPLOYEE_ID));
+
+        assertEquals("The order does not belong to the restaurant of the employee", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any());
+    }
+
+    @Test
+    void assignAnOrderAlreadyInPreparationThrowsOrderNotPendingException() {
+        assertTheOrderCannotBeAssignedWhenItIs(OrderStatus.IN_PREPARATION);
+    }
+
+    @Test
+    void assignAReadyOrderThrowsOrderNotPendingException() {
+        assertTheOrderCannotBeAssignedWhenItIs(OrderStatus.READY);
+    }
+
+    @Test
+    void assignACancelledOrderThrowsOrderNotPendingException() {
+        assertTheOrderCannotBeAssignedWhenItIs(OrderStatus.CANCELLED);
+    }
+
+    private void assertTheOrderCannotBeAssignedWhenItIs(OrderStatus status) {
+        when(orderPersistencePort.findOrderById(ORDER_ID))
+                .thenReturn(Optional.of(buildExistingOrder(RESTAURANT_ID, status)));
+        when(restaurantEmployeePersistencePort.findRestaurantIdByEmployeeId(EMPLOYEE_ID))
+                .thenReturn(Optional.of(RESTAURANT_ID));
+
+        OrderNotPendingException exception = assertThrows(OrderNotPendingException.class,
+                () -> orderUseCase.assignOrder(ORDER_ID, EMPLOYEE_ID));
+
+        assertEquals("Only pending orders can be assigned", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any());
     }
 }
