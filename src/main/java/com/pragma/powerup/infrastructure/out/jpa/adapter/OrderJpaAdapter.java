@@ -43,6 +43,6 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
 
     @Override
     public Optional<OrderModel> findOrderById(Long orderId) {
-        throw new UnsupportedOperationException("Implemented in step H2");
+        return orderRepository.findById(orderId).map(orderEntityMapper::toModel);
     }
 }

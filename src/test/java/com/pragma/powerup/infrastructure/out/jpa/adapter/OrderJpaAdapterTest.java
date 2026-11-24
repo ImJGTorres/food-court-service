@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,6 +35,7 @@ import static org.mockito.Mockito.when;
 class OrderJpaAdapterTest {
     private static final Long CLIENT_ID = 20L;
     private static final Long RESTAURANT_ID = 1L;
+    private static final Long ORDER_ID = 7L;
     private static final List<OrderStatus> IN_PROGRESS_STATUSES =
             List.of(OrderStatus.PENDING, OrderStatus.IN_PREPARATION, OrderStatus.READY);
 
@@ -111,5 +113,25 @@ class OrderJpaAdapterTest {
                 () -> assertEquals(3L, result.getTotalElements()),
                 () -> assertEquals(3, result.getTotalPages())
         );
+    }
+
+    @Test
+    void findOrderByIdReturnsTheOrderAsModelWhenItExists() {
+        OrderEntity entity = new OrderEntity();
+        OrderModel model = new OrderModel();
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(entity));
+        when(orderEntityMapper.toModel(entity)).thenReturn(model);
+
+        Optional<OrderModel> result = orderJpaAdapter.findOrderById(ORDER_ID);
+
+        assertTrue(result.isPresent());
+        assertSame(model, result.get());
+    }
+
+    @Test
+    void findOrderByIdReturnsEmptyWhenTheOrderDoesNotExist() {
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertTrue(orderJpaAdapter.findOrderById(ORDER_ID).isEmpty());
     }
 }
