@@ -16,6 +16,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -70,6 +72,26 @@ public class OrderRestController {
             @RequestParam(defaultValue = DEFAULT_SIZE) int size,
             Authentication authentication) {
         return ResponseEntity.ok(orderHandler.listOrdersByStatus(getUserId(authentication), status, page, size));
+    }
+
+    @Operation(summary = "Assign the order to the employee of the token; it moves from PENDING to IN_PREPARATION")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Order assigned and in preparation",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OrderResponseDto.class))),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "Not an employee, not assigned to a restaurant or the order is of another restaurant",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "Order not found", content = @Content),
+            @ApiResponse(responseCode = "409",
+                    description = "The order is not pending or someone else changed it at the same time",
+                    content = @Content)
+    })
+    @PatchMapping(value = "/orders/{orderId}/assign", produces = "application/json")
+    public ResponseEntity<OrderResponseDto> assignOrder(@PathVariable Long orderId,
+                                                        Authentication authentication) {
+        return ResponseEntity.ok(orderHandler.assignOrder(orderId, getUserId(authentication)));
     }
 
     private Long getUserId(Authentication authentication) {

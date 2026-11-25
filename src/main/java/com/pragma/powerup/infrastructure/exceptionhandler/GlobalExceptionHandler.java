@@ -13,10 +13,14 @@ import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.InvalidRestaurantNameException;
 import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderNotFoundException;
+import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
+import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantAlreadyExistsException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.exception.UserServiceUnavailableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -36,6 +40,7 @@ public class GlobalExceptionHandler {
     private static final String INVALID_PARAMETER_MESSAGE = "Invalid value for parameter '%s'";
     private static final String MALFORMED_REQUEST_MESSAGE = "Malformed or invalid JSON request";
     private static final String MISSING_PARAMETER_MESSAGE = "Missing required parameter '%s'";
+    private static final String CONCURRENT_MODIFICATION_MESSAGE = "The order was modified by someone else, try again";
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationException(
@@ -65,9 +70,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
 
-    @ExceptionHandler(OrderInProgressException.class)
-    public ResponseEntity<Map<String, String>> handleOrderInProgressException(OrderInProgressException exception) {
+    @ExceptionHandler({OrderInProgressException.class, OrderNotPendingException.class})
+    public ResponseEntity<Map<String, String>> handleOrderConflictException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, String>> handleConcurrentModificationException() {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Collections.singletonMap(MESSAGE, CONCURRENT_MODIFICATION_MESSAGE));
     }
 
     @ExceptionHandler(EmployeeAlreadyAssignedException.class)
@@ -82,12 +93,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
 
-    @ExceptionHandler({RestaurantNotFoundException.class, CategoryNotFoundException.class, DishNotFoundException.class})
+    @ExceptionHandler({RestaurantNotFoundException.class, CategoryNotFoundException.class,
+            DishNotFoundException.class, OrderNotFoundException.class})
     public ResponseEntity<Map<String, String>> handleNotFoundException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
 
-    @ExceptionHandler({NotRestaurantOwnerException.class, EmployeeNotAssignedException.class})
+    @ExceptionHandler({NotRestaurantOwnerException.class, EmployeeNotAssignedException.class,
+            OrderNotFromEmployeeRestaurantException.class})
     public ResponseEntity<Map<String, String>> handleForbiddenException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }

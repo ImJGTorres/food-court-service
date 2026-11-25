@@ -41,6 +41,7 @@ class SecurityConfigurationTest {
     private static final String DISH_STATUS_URL = "/api/v1/dishes/7/status";
     private static final String RESTAURANT_DISHES_URL = "/api/v1/restaurants/1/dishes";
     private static final String ORDERS_URL = "/api/v1/orders";
+    private static final String ASSIGN_ORDER_URL = "/api/v1/orders/1/assign";
     private static final String RESTAURANT_EMPLOYEES_URL = "/api/v1/restaurants/1/employees";
     private static final String AUTHORIZATION = "Authorization";
 
@@ -420,5 +421,40 @@ class SecurityConfigurationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patchAssignOrderWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(patch(ASSIGN_ORDER_URL))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void patchAssignOrderWithClientTokenReturns403() throws Exception {
+        mockMvc.perform(patch(ASSIGN_ORDER_URL).header(AUTHORIZATION, bearerTokenFor(20L, "CLIENT")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patchAssignOrderWithOwnerTokenReturns403() throws Exception {
+        mockMvc.perform(patch(ASSIGN_ORDER_URL).header(AUTHORIZATION, bearerTokenFor(1L, "OWNER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patchAssignOrderWithAdminTokenReturns403() throws Exception {
+        mockMvc.perform(patch(ASSIGN_ORDER_URL).header(AUTHORIZATION, bearerTokenFor(1L, "ADMIN")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patchAssignOrderGivesTheHandlerTheUserIdOfTheTokenAsEmployeeId() throws Exception {
+        OrderResponseDto response = new OrderResponseDto();
+        response.setId(1L);
+        when(orderHandler.assignOrder(1L, 24L)).thenReturn(response);
+
+        mockMvc.perform(patch(ASSIGN_ORDER_URL).header(AUTHORIZATION, bearerTokenFor(24L, "EMPLOYEE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
     }
 }
