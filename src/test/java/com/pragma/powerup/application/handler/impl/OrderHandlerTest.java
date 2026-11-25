@@ -8,6 +8,7 @@ import com.pragma.powerup.application.mapper.IOrderResponseMapper;
 import com.pragma.powerup.domain.api.IOrderServicePort;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.model.OrderModel;
 import com.pragma.powerup.domain.model.OrderStatus;
 import com.pragma.powerup.domain.model.PageModel;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.when;
 class OrderHandlerTest {
     private static final Long CLIENT_ID = 20L;
     private static final Long EMPLOYEE_ID = 24L;
+    private static final Long ORDER_ID = 1L;
 
     @Mock
     private IOrderServicePort orderServicePort;
@@ -99,6 +101,29 @@ class OrderHandlerTest {
 
         assertThrows(EmployeeNotAssignedException.class,
                 () -> orderHandler.listOrdersByStatus(EMPLOYEE_ID, OrderStatus.PENDING, 0, 10));
+
+        verifyNoInteractions(orderResponseMapper);
+    }
+
+    @Test
+    void assignOrderPassesTheOrderAndTheEmployeeAndReturnsTheMappedOrder() {
+        OrderModel assignedOrder = new OrderModel();
+        OrderResponseDto expectedResponse = new OrderResponseDto();
+        when(orderServicePort.assignOrder(ORDER_ID, EMPLOYEE_ID)).thenReturn(assignedOrder);
+        when(orderResponseMapper.toResponse(assignedOrder)).thenReturn(expectedResponse);
+
+        OrderResponseDto result = orderHandler.assignOrder(ORDER_ID, EMPLOYEE_ID);
+
+        assertSame(expectedResponse, result);
+        verify(orderServicePort).assignOrder(ORDER_ID, EMPLOYEE_ID);
+    }
+
+    @Test
+    void assignOrderWhenTheServicePortThrowsPropagatesTheExceptionWithoutMapping() {
+        when(orderServicePort.assignOrder(ORDER_ID, EMPLOYEE_ID))
+                .thenThrow(new OrderNotPendingException("Only pending orders can be assigned"));
+
+        assertThrows(OrderNotPendingException.class, () -> orderHandler.assignOrder(ORDER_ID, EMPLOYEE_ID));
 
         verifyNoInteractions(orderResponseMapper);
     }
