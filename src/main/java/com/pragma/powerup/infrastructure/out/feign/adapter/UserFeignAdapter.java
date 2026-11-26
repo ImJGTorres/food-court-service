@@ -1,5 +1,6 @@
 package com.pragma.powerup.infrastructure.out.feign.adapter;
 
+import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.UserServiceUnavailableException;
 import com.pragma.powerup.domain.spi.IUserClientPort;
 import com.pragma.powerup.infrastructure.out.feign.client.IUserFeignClient;
@@ -12,6 +13,7 @@ public class UserFeignAdapter implements IUserClientPort {
     private static final String OWNER_ROLE = "OWNER";
     private static final String EMPLOYEE_ROLE = "EMPLOYEE";
     private static final String USER_SERVICE_UNAVAILABLE_MESSAGE = "The users service is not available";
+    private static final String CLIENT_PHONE_NOT_FOUND_MESSAGE = "The phone of the client could not be found";
 
     private final IUserFeignClient userFeignClient;
 
@@ -27,7 +29,13 @@ public class UserFeignAdapter implements IUserClientPort {
 
     @Override
     public String getClientPhone(Long clientId) {
-        throw new UnsupportedOperationException("Implemented in step K2");
+        try {
+            return userFeignClient.getClientPhone(clientId).getPhone();
+        } catch (FeignException.NotFound exception) {
+            throw new NotificationRejectedException(CLIENT_PHONE_NOT_FOUND_MESSAGE);
+        } catch (FeignException exception) {
+            throw new UserServiceUnavailableException(USER_SERVICE_UNAVAILABLE_MESSAGE);
+        }
     }
 
     private boolean hasRole(Long userId, String role) {

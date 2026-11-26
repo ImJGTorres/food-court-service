@@ -18,6 +18,7 @@ import com.pragma.powerup.domain.usecase.RestaurantEmployeeUseCase;
 import com.pragma.powerup.domain.usecase.RestaurantUseCase;
 import com.pragma.powerup.infrastructure.out.feign.adapter.MessagingFeignAdapter;
 import com.pragma.powerup.infrastructure.out.feign.adapter.UserFeignAdapter;
+import com.pragma.powerup.infrastructure.out.feign.client.IMessagingFeignClient;
 import com.pragma.powerup.infrastructure.out.feign.client.IUserFeignClient;
 import com.pragma.powerup.infrastructure.out.jpa.adapter.CategoryJpaAdapter;
 import com.pragma.powerup.infrastructure.out.jpa.adapter.DishJpaAdapter;
@@ -47,6 +48,7 @@ public class BeanConfiguration {
     private final IRestaurantRepository restaurantRepository;
     private final IRestaurantEntityMapper restaurantEntityMapper;
     private final IUserFeignClient userFeignClient;
+    private final IMessagingFeignClient messagingFeignClient;
 
     private final IDishRepository dishRepository;
     private final IDishEntityMapper dishEntityMapper;
@@ -101,7 +103,7 @@ public class BeanConfiguration {
 
     @Bean
     public INotificationPort notificationPort() {
-        return new MessagingFeignAdapter();
+        return new MessagingFeignAdapter(messagingFeignClient);
     }
 
     @Bean

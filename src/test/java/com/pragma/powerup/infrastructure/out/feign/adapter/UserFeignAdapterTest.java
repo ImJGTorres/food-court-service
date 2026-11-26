@@ -1,8 +1,10 @@
 package com.pragma.powerup.infrastructure.out.feign.adapter;
 
+import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.UserServiceUnavailableException;
 import com.pragma.powerup.infrastructure.out.feign.client.IUserFeignClient;
 import com.pragma.powerup.infrastructure.out.feign.dto.UserFeignResponse;
+import com.pragma.powerup.infrastructure.out.feign.dto.UserPhoneFeignResponse;
 import feign.FeignException;
 import feign.Request;
 import org.junit.jupiter.api.Test;
@@ -103,5 +105,33 @@ class UserFeignAdapterTest {
                 new FeignException.InternalServerError("error", buildRequest(), null, Collections.emptyMap()));
 
         assertThrows(UserServiceUnavailableException.class, () -> userFeignAdapter.isEmployee(USER_ID));
+    }
+
+    @Test
+    void getClientPhoneReturnsThePhoneGivenByTheUsersService() {
+        UserPhoneFeignResponse response = new UserPhoneFeignResponse();
+        response.setPhone("+573005698325");
+        when(userFeignClient.getClientPhone(USER_ID)).thenReturn(response);
+
+        assertEquals("+573005698325", userFeignAdapter.getClientPhone(USER_ID));
+    }
+
+    @Test
+    void getClientPhoneWhenTheUsersServiceDoesNotFindTheClientThrowsNotificationRejectedException() {
+        when(userFeignClient.getClientPhone(USER_ID)).thenThrow(
+                new FeignException.NotFound("not found", buildRequest(), null, Collections.emptyMap()));
+
+        NotificationRejectedException exception = assertThrows(NotificationRejectedException.class,
+                () -> userFeignAdapter.getClientPhone(USER_ID));
+
+        assertEquals("The phone of the client could not be found", exception.getMessage());
+    }
+
+    @Test
+    void getClientPhoneWhenTheUsersServiceFailsThrowsUserServiceUnavailableException() {
+        when(userFeignClient.getClientPhone(USER_ID)).thenThrow(
+                new FeignException.InternalServerError("error", buildRequest(), null, Collections.emptyMap()));
+
+        assertThrows(UserServiceUnavailableException.class, () -> userFeignAdapter.getClientPhone(USER_ID));
     }
 }

@@ -49,19 +49,19 @@ class OrderJpaAdapterTest {
     private OrderJpaAdapter orderJpaAdapter;
 
     @Test
-    void saveOrderConvertsTheModelSavesTheEntityAndReturnsTheSavedOrderAsModel() {
+    void saveOrderConvertsTheModelFlushesTheEntityAtOnceAndReturnsTheSavedOrderAsModel() {
         OrderModel orderToSave = new OrderModel();
         OrderEntity entityToSave = new OrderEntity();
         OrderEntity savedEntity = new OrderEntity();
         OrderModel savedOrder = new OrderModel();
         when(orderEntityMapper.toEntity(orderToSave)).thenReturn(entityToSave);
-        when(orderRepository.save(entityToSave)).thenReturn(savedEntity);
+        when(orderRepository.saveAndFlush(entityToSave)).thenReturn(savedEntity);
         when(orderEntityMapper.toModel(savedEntity)).thenReturn(savedOrder);
 
         OrderModel result = orderJpaAdapter.saveOrder(orderToSave);
 
         assertSame(savedOrder, result);
-        verify(orderRepository).save(entityToSave);
+        verify(orderRepository).saveAndFlush(entityToSave);
     }
 
     @Test

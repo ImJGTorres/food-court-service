@@ -59,4 +59,7 @@ public class OrderEntity {
     @Version
     @Column(nullable = false)
     private Long version;
+
+    @Column(name = "security_pin", length = 6)
+    private String securityPin;
 }
