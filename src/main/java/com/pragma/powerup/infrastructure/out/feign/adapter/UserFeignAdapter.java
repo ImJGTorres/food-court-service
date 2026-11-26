@@ -25,6 +25,11 @@ public class UserFeignAdapter implements IUserClientPort {
         return hasRole(userId, EMPLOYEE_ROLE);
     }
 
+    @Override
+    public String getClientPhone(Long clientId) {
+        throw new UnsupportedOperationException("Implemented in step K2");
+    }
+
     private boolean hasRole(Long userId, String role) {
         try {
             UserFeignResponse user = userFeignClient.getUserById(userId);

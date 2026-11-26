@@ -6,7 +6,9 @@ import com.pragma.powerup.domain.api.IRestaurantEmployeeServicePort;
 import com.pragma.powerup.domain.api.IRestaurantServicePort;
 import com.pragma.powerup.domain.spi.ICategoryPersistencePort;
 import com.pragma.powerup.domain.spi.IDishPersistencePort;
+import com.pragma.powerup.domain.spi.INotificationPort;
 import com.pragma.powerup.domain.spi.IOrderPersistencePort;
+import com.pragma.powerup.domain.spi.IPinGeneratorPort;
 import com.pragma.powerup.domain.spi.IRestaurantEmployeePersistencePort;
 import com.pragma.powerup.domain.spi.IRestaurantPersistencePort;
 import com.pragma.powerup.domain.spi.IUserClientPort;
@@ -14,6 +16,7 @@ import com.pragma.powerup.domain.usecase.DishUseCase;
 import com.pragma.powerup.domain.usecase.OrderUseCase;
 import com.pragma.powerup.domain.usecase.RestaurantEmployeeUseCase;
 import com.pragma.powerup.domain.usecase.RestaurantUseCase;
+import com.pragma.powerup.infrastructure.out.feign.adapter.MessagingFeignAdapter;
 import com.pragma.powerup.infrastructure.out.feign.adapter.UserFeignAdapter;
 import com.pragma.powerup.infrastructure.out.feign.client.IUserFeignClient;
 import com.pragma.powerup.infrastructure.out.jpa.adapter.CategoryJpaAdapter;
@@ -31,6 +34,7 @@ import com.pragma.powerup.infrastructure.out.jpa.repository.IDishRepository;
 import com.pragma.powerup.infrastructure.out.jpa.repository.IOrderRepository;
 import com.pragma.powerup.infrastructure.out.jpa.repository.IRestaurantEmployeeRepository;
 import com.pragma.powerup.infrastructure.out.jpa.repository.IRestaurantRepository;
+import com.pragma.powerup.infrastructure.out.pin.SecureRandomPinAdapter;
 import com.pragma.powerup.infrastructure.security.JwtTokenParser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -91,9 +95,19 @@ public class BeanConfiguration {
     }
 
     @Bean
+    public IPinGeneratorPort pinGeneratorPort() {
+        return new SecureRandomPinAdapter();
+    }
+
+    @Bean
+    public INotificationPort notificationPort() {
+        return new MessagingFeignAdapter();
+    }
+
+    @Bean
     public IOrderServicePort orderServicePort() {
         return new OrderUseCase(orderPersistencePort(), restaurantPersistencePort(), dishPersistencePort(),
-                restaurantEmployeePersistencePort());
+                restaurantEmployeePersistencePort(), pinGeneratorPort(), notificationPort(), userClientPort());
     }
 
     @Bean
