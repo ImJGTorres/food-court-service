@@ -6,8 +6,10 @@ import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
+import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
@@ -18,9 +20,12 @@ import com.pragma.powerup.domain.model.OrderStatus;
 import com.pragma.powerup.domain.model.PageModel;
 import com.pragma.powerup.domain.model.RestaurantModel;
 import com.pragma.powerup.domain.spi.IDishPersistencePort;
+import com.pragma.powerup.domain.spi.INotificationPort;
 import com.pragma.powerup.domain.spi.IOrderPersistencePort;
+import com.pragma.powerup.domain.spi.IPinGeneratorPort;
 import com.pragma.powerup.domain.spi.IRestaurantEmployeePersistencePort;
 import com.pragma.powerup.domain.spi.IRestaurantPersistencePort;
+import com.pragma.powerup.domain.spi.IUserClientPort;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -42,20 +47,34 @@ public class OrderUseCase implements IOrderServicePort {
     private static final String ORDER_NOT_FROM_EMPLOYEE_RESTAURANT_MESSAGE =
             "The order does not belong to the restaurant of the employee";
     private static final String ORDER_NOT_PENDING_MESSAGE = "Only pending orders can be assigned";
+    private static final String ORDER_NOT_IN_PREPARATION_MESSAGE =
+            "Only orders in preparation can be marked as ready";
+    private static final String ORDER_NOT_ASSIGNED_TO_EMPLOYEE_MESSAGE =
+            "Only the employee assigned to the order can mark it as ready";
+    private static final String ORDER_READY_SMS = "Pedido #%d listo en %s. Tu PIN de seguridad es %s.";
 
     private final IOrderPersistencePort orderPersistencePort;
     private final IRestaurantPersistencePort restaurantPersistencePort;
     private final IDishPersistencePort dishPersistencePort;
     private final IRestaurantEmployeePersistencePort restaurantEmployeePersistencePort;
+    private final IPinGeneratorPort pinGeneratorPort;
+    private final INotificationPort notificationPort;
+    private final IUserClientPort userClientPort;
 
     public OrderUseCase(IOrderPersistencePort orderPersistencePort,
                         IRestaurantPersistencePort restaurantPersistencePort,
                         IDishPersistencePort dishPersistencePort,
-                        IRestaurantEmployeePersistencePort restaurantEmployeePersistencePort) {
+                        IRestaurantEmployeePersistencePort restaurantEmployeePersistencePort,
+                        IPinGeneratorPort pinGeneratorPort,
+                        INotificationPort notificationPort,
+                        IUserClientPort userClientPort) {
         this.orderPersistencePort = orderPersistencePort;
         this.restaurantPersistencePort = restaurantPersistencePort;
         this.dishPersistencePort = dishPersistencePort;
         this.restaurantEmployeePersistencePort = restaurantEmployeePersistencePort;
+        this.pinGeneratorPort = pinGeneratorPort;
+        this.notificationPort = notificationPort;
+        this.userClientPort = userClientPort;
     }
 
     @Override
@@ -82,8 +101,7 @@ public class OrderUseCase implements IOrderServicePort {
 
     @Override
     public OrderModel assignOrder(Long orderId, Long employeeId) {
-        OrderModel order = orderPersistencePort.findOrderById(orderId)
-                .orElseThrow(() -> new OrderNotFoundException(ORDER_NOT_FOUND_MESSAGE));
+        OrderModel order = findOrder(orderId);
         if (!order.getRestaurant().getId().equals(findRestaurantIdOfEmployee(employeeId))) {
             throw new OrderNotFromEmployeeRestaurantException(ORDER_NOT_FROM_EMPLOYEE_RESTAURANT_MESSAGE);
         }
@@ -93,6 +111,31 @@ public class OrderUseCase implements IOrderServicePort {
         order.setEmployeeId(employeeId);
         order.setStatus(OrderStatus.IN_PREPARATION);
         return orderPersistencePort.saveOrder(order);
+    }
+
+    @Override
+    public OrderModel markOrderReady(Long orderId, Long employeeId) {
+        OrderModel order = findOrder(orderId);
+        if (order.getStatus() != OrderStatus.IN_PREPARATION) {
+            throw new OrderNotInPreparationException(ORDER_NOT_IN_PREPARATION_MESSAGE);
+        }
+        if (!employeeId.equals(order.getEmployeeId())) {
+            throw new OrderNotAssignedToEmployeeException(ORDER_NOT_ASSIGNED_TO_EMPLOYEE_MESSAGE);
+        }
+        order.setSecurityPin(pinGeneratorPort.generatePin());
+        order.setStatus(OrderStatus.READY);
+        OrderModel savedOrder = orderPersistencePort.saveOrder(order);
+        notificationPort.sendSms(userClientPort.getClientPhone(order.getClientId()), buildReadySms(order));
+        return savedOrder;
+    }
+
+    private OrderModel findOrder(Long orderId) {
+        return orderPersistencePort.findOrderById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(ORDER_NOT_FOUND_MESSAGE));
+    }
+
+    private String buildReadySms(OrderModel order) {
+        return String.format(ORDER_READY_SMS, order.getId(), order.getRestaurant().getName(), order.getSecurityPin());
     }
 
     private Long findRestaurantIdOfEmployee(Long employeeId) {

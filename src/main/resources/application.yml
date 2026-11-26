@@ -12,8 +12,19 @@ spring:
       ddl-auto: update
     show-sql: true
 
+  cloud:
+    openfeign:
+      client:
+        config:
+          messaging-service:
+            connect-timeout: 2000
+            read-timeout: 10000
+
 users-service:
   url: http://localhost:8081
+
+messaging-service:
+  url: http://localhost:8083
 
 jwt:
   secret: ${JWT_SECRET}

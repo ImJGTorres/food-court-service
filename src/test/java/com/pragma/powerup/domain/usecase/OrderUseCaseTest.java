@@ -5,9 +5,13 @@ import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.InvalidPaginationException;
+import com.pragma.powerup.domain.exception.MessagingServiceUnavailableException;
+import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
+import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
@@ -18,12 +22,18 @@ import com.pragma.powerup.domain.model.OrderStatus;
 import com.pragma.powerup.domain.model.PageModel;
 import com.pragma.powerup.domain.model.RestaurantModel;
 import com.pragma.powerup.domain.spi.IDishPersistencePort;
+import com.pragma.powerup.domain.spi.INotificationPort;
 import com.pragma.powerup.domain.spi.IOrderPersistencePort;
+import com.pragma.powerup.domain.spi.IPinGeneratorPort;
 import com.pragma.powerup.domain.spi.IRestaurantEmployeePersistencePort;
 import com.pragma.powerup.domain.spi.IRestaurantPersistencePort;
+import com.pragma.powerup.domain.spi.IUserClientPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -41,6 +51,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -55,6 +68,8 @@ class OrderUseCaseTest {
     private static final Long PIZZA_ID = 5L;
     private static final Long EMPLOYEE_ID = 24L;
     private static final Long ORDER_ID = 1L;
+    private static final String PIN = "482913";
+    private static final String CLIENT_PHONE = "+573005698325";
     private static final List<OrderStatus> IN_PROGRESS_STATUSES =
             List.of(OrderStatus.PENDING, OrderStatus.IN_PREPARATION, OrderStatus.READY);
 
@@ -69,6 +84,15 @@ class OrderUseCaseTest {
 
     @Mock
     private IRestaurantEmployeePersistencePort restaurantEmployeePersistencePort;
+
+    @Mock
+    private IPinGeneratorPort pinGeneratorPort;
+
+    @Mock
+    private INotificationPort notificationPort;
+
+    @Mock
+    private IUserClientPort userClientPort;
 
     @InjectMocks
     private OrderUseCase orderUseCase;
@@ -347,5 +371,103 @@ class OrderUseCaseTest {
 
         assertEquals("Only pending orders can be assigned", exception.getMessage());
         verify(orderPersistencePort, never()).saveOrder(any());
+    }
+
+    private OrderModel buildOrderInPreparation() {
+        RestaurantModel restaurant = buildRestaurant(RESTAURANT_ID);
+        restaurant.setName("Arepas");
+        OrderModel order = buildExistingOrder(RESTAURANT_ID, OrderStatus.IN_PREPARATION);
+        order.setRestaurant(restaurant);
+        order.setClientId(CLIENT_ID);
+        order.setEmployeeId(EMPLOYEE_ID);
+        return order;
+    }
+
+    @Test
+    void markOrderReadyGeneratesThePinSavesTheOrderAsReadyAndThenSendsTheSmsToTheClient() {
+        OrderModel order = buildOrderInPreparation();
+        OrderModel savedOrder = new OrderModel();
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(pinGeneratorPort.generatePin()).thenReturn(PIN);
+        when(orderPersistencePort.saveOrder(any(OrderModel.class))).thenReturn(savedOrder);
+        when(userClientPort.getClientPhone(CLIENT_ID)).thenReturn(CLIENT_PHONE);
+
+        OrderModel result = orderUseCase.markOrderReady(ORDER_ID, EMPLOYEE_ID);
+
+        assertSame(savedOrder, result);
+        ArgumentCaptor<OrderModel> orderCaptor = ArgumentCaptor.forClass(OrderModel.class);
+        InOrder inOrder = inOrder(orderPersistencePort, userClientPort, notificationPort);
+        inOrder.verify(orderPersistencePort).saveOrder(orderCaptor.capture());
+        inOrder.verify(userClientPort).getClientPhone(CLIENT_ID);
+        inOrder.verify(notificationPort)
+                .sendSms(CLIENT_PHONE, "Pedido #1 listo en Arepas. Tu PIN de seguridad es 482913.");
+        assertAll(
+                () -> assertEquals(OrderStatus.READY, orderCaptor.getValue().getStatus()),
+                () -> assertEquals(PIN, orderCaptor.getValue().getSecurityPin()),
+                () -> assertEquals(EMPLOYEE_ID, orderCaptor.getValue().getEmployeeId())
+        );
+    }
+
+    @Test
+    void markOrderReadyOfAMissingOrderThrowsOrderNotFoundExceptionWithoutTouchingAnythingElse() {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThrows(OrderNotFoundException.class, () -> orderUseCase.markOrderReady(ORDER_ID, EMPLOYEE_ID));
+
+        verifyNoInteractions(pinGeneratorPort, userClientPort, notificationPort);
+        verify(orderPersistencePort, never()).saveOrder(any());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OrderStatus.class, names = "IN_PREPARATION", mode = EnumSource.Mode.EXCLUDE)
+    void markOrderReadyOfAnOrderThatIsNotInPreparationThrowsOrderNotInPreparationException(OrderStatus status) {
+        OrderModel order = buildOrderInPreparation();
+        order.setStatus(status);
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        OrderNotInPreparationException exception = assertThrows(OrderNotInPreparationException.class,
+                () -> orderUseCase.markOrderReady(ORDER_ID, EMPLOYEE_ID));
+
+        assertEquals("Only orders in preparation can be marked as ready", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any());
+        verifyNoInteractions(pinGeneratorPort, userClientPort, notificationPort);
+    }
+
+    @Test
+    void markOrderReadyByAnEmployeeThatIsNotTheAssignedOneThrowsOrderNotAssignedToEmployeeException() {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(buildOrderInPreparation()));
+
+        OrderNotAssignedToEmployeeException exception = assertThrows(OrderNotAssignedToEmployeeException.class,
+                () -> orderUseCase.markOrderReady(ORDER_ID, 99L));
+
+        assertEquals("Only the employee assigned to the order can mark it as ready", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any());
+        verifyNoInteractions(pinGeneratorPort, userClientPort, notificationPort);
+    }
+
+    @Test
+    void markOrderReadyWhenTheClientPhoneCannotBeObtainedLetsTheExceptionPassAndSendsNoSms() {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(buildOrderInPreparation()));
+        when(pinGeneratorPort.generatePin()).thenReturn(PIN);
+        when(orderPersistencePort.saveOrder(any(OrderModel.class))).thenReturn(new OrderModel());
+        when(userClientPort.getClientPhone(CLIENT_ID))
+                .thenThrow(new NotificationRejectedException("The client has no phone to notify"));
+
+        assertThrows(NotificationRejectedException.class, () -> orderUseCase.markOrderReady(ORDER_ID, EMPLOYEE_ID));
+
+        verify(notificationPort, never()).sendSms(anyString(), anyString());
+    }
+
+    @Test
+    void markOrderReadyWhenTheMessagingServiceFailsLetsTheExceptionPassSoTheTransactionIsRolledBack() {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(buildOrderInPreparation()));
+        when(pinGeneratorPort.generatePin()).thenReturn(PIN);
+        when(orderPersistencePort.saveOrder(any(OrderModel.class))).thenReturn(new OrderModel());
+        when(userClientPort.getClientPhone(CLIENT_ID)).thenReturn(CLIENT_PHONE);
+        doThrow(new MessagingServiceUnavailableException("The messaging service is not available"))
+                .when(notificationPort).sendSms(anyString(), anyString());
+
+        assertThrows(MessagingServiceUnavailableException.class,
+                () -> orderUseCase.markOrderReady(ORDER_ID, EMPLOYEE_ID));
     }
 }

@@ -21,4 +21,5 @@ public class OrderModel {
     private Long employeeId;
     private List<OrderDishModel> dishes;
     private Long version;
+    private String securityPin;
 }

@@ -10,4 +10,6 @@ public interface IOrderServicePort {
     PageModel<OrderModel> listOrdersByStatus(Long employeeId, OrderStatus status, int page, int size);
 
     OrderModel assignOrder(Long orderId, Long employeeId);
+
+    OrderModel markOrderReady(Long orderId, Long employeeId);
 }
