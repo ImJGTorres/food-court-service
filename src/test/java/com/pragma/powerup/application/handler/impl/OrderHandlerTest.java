@@ -8,6 +8,7 @@ import com.pragma.powerup.application.mapper.IOrderResponseMapper;
 import com.pragma.powerup.domain.api.IOrderServicePort;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.MessagingServiceUnavailableException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.model.OrderModel;
 import com.pragma.powerup.domain.model.OrderStatus;
@@ -124,6 +125,30 @@ class OrderHandlerTest {
                 .thenThrow(new OrderNotPendingException("Only pending orders can be assigned"));
 
         assertThrows(OrderNotPendingException.class, () -> orderHandler.assignOrder(ORDER_ID, EMPLOYEE_ID));
+
+        verifyNoInteractions(orderResponseMapper);
+    }
+
+    @Test
+    void markOrderReadyPassesTheOrderAndTheEmployeeAndReturnsTheMappedOrder() {
+        OrderModel readyOrder = new OrderModel();
+        OrderResponseDto expectedResponse = new OrderResponseDto();
+        when(orderServicePort.markOrderReady(ORDER_ID, EMPLOYEE_ID)).thenReturn(readyOrder);
+        when(orderResponseMapper.toResponse(readyOrder)).thenReturn(expectedResponse);
+
+        OrderResponseDto result = orderHandler.markOrderReady(ORDER_ID, EMPLOYEE_ID);
+
+        assertSame(expectedResponse, result);
+        verify(orderServicePort).markOrderReady(ORDER_ID, EMPLOYEE_ID);
+    }
+
+    @Test
+    void markOrderReadyWhenTheSmsCannotBeSentPropagatesTheExceptionSoTheTransactionIsRolledBack() {
+        when(orderServicePort.markOrderReady(ORDER_ID, EMPLOYEE_ID))
+                .thenThrow(new MessagingServiceUnavailableException("The messaging service is not available"));
+
+        assertThrows(MessagingServiceUnavailableException.class,
+                () -> orderHandler.markOrderReady(ORDER_ID, EMPLOYEE_ID));
 
         verifyNoInteractions(orderResponseMapper);
     }
