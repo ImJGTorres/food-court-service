@@ -94,6 +94,28 @@ public class OrderRestController {
         return ResponseEntity.ok(orderHandler.assignOrder(orderId, getUserId(authentication)));
     }
 
+    @Operation(summary = "Mark the order as ready: generates the security PIN and sends it to the client by SMS")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Order ready; the PIN was sent to the client",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OrderResponseDto.class))),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "Not an employee or not the employee assigned to the order", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Order not found", content = @Content),
+            @ApiResponse(responseCode = "409", description = "The order is not in preparation or changed at the same time",
+                    content = @Content),
+            @ApiResponse(responseCode = "422", description = "The client phone cannot receive SMS",
+                    content = @Content),
+            @ApiResponse(responseCode = "503", description = "Messaging or users service not available",
+                    content = @Content)
+    })
+    @PatchMapping(value = "/orders/{orderId}/ready", produces = "application/json")
+    public ResponseEntity<OrderResponseDto> markOrderReady(@PathVariable Long orderId,
+                                                           Authentication authentication) {
+        return ResponseEntity.ok(orderHandler.markOrderReady(orderId, getUserId(authentication)));
+    }
+
     private Long getUserId(Authentication authentication) {
         return (Long) authentication.getPrincipal();
     }

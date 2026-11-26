@@ -10,12 +10,17 @@ import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.InvalidPaginationException;
+import com.pragma.powerup.domain.exception.MessagingServiceUnavailableException;
+import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
+import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
+import com.pragma.powerup.domain.exception.UserServiceUnavailableException;
 import com.pragma.powerup.domain.model.OrderStatus;
 import com.pragma.powerup.infrastructure.exceptionhandler.GlobalExceptionHandler;
 import com.pragma.powerup.infrastructure.out.jpa.entity.OrderEntity;
@@ -50,6 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderRestControllerTest {
     private static final String ORDERS_URL = "/api/v1/orders";
     private static final String ASSIGN_ORDER_URL = "/api/v1/orders/1/assign";
+    private static final String READY_ORDER_URL = "/api/v1/orders/1/ready";
     private static final Long TOKEN_CLIENT_ID = 20L;
     private static final Long TOKEN_EMPLOYEE_ID = 24L;
     private static final String VALID_ORDER_JSON = """
@@ -382,6 +388,90 @@ class OrderRestControllerTest {
     @Test
     void assignAnOrderWithANonNumericIdReturns400WithAShortMessage() throws Exception {
         mockMvc.perform(patch(ORDERS_URL + "/abc/assign").principal(employeeAuthentication))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'orderId'"));
+
+        verifyNoInteractions(orderHandler);
+    }
+
+    @Test
+    void markOrderReadyReturns200WithTheReadyOrderAndNeverShowsThePin() throws Exception {
+        OrderResponseDto response = new OrderResponseDto();
+        response.setId(1L);
+        response.setStatus("READY");
+        response.setEmployeeId(TOKEN_EMPLOYEE_ID);
+        when(orderHandler.markOrderReady(1L, TOKEN_EMPLOYEE_ID)).thenReturn(response);
+
+        mockMvc.perform(patch(READY_ORDER_URL).principal(employeeAuthentication))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value("READY"))
+                .andExpect(jsonPath("$.employeeId").value(24))
+                .andExpect(jsonPath("$.securityPin").doesNotExist())
+                .andExpect(jsonPath("$.pin").doesNotExist());
+    }
+
+    @Test
+    void markAMissingOrderAsReadyReturns404() throws Exception {
+        when(orderHandler.markOrderReady(1L, TOKEN_EMPLOYEE_ID))
+                .thenThrow(new OrderNotFoundException("The requested order does not exist"));
+
+        mockMvc.perform(patch(READY_ORDER_URL).principal(employeeAuthentication))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void markAnOrderThatIsNotInPreparationAsReadyReturns409() throws Exception {
+        when(orderHandler.markOrderReady(1L, TOKEN_EMPLOYEE_ID))
+                .thenThrow(new OrderNotInPreparationException("Only orders in preparation can be marked as ready"));
+
+        mockMvc.perform(patch(READY_ORDER_URL).principal(employeeAuthentication))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Only orders in preparation can be marked as ready"));
+    }
+
+    @Test
+    void markAnOrderAssignedToAnotherEmployeeAsReadyReturns403() throws Exception {
+        when(orderHandler.markOrderReady(1L, TOKEN_EMPLOYEE_ID)).thenThrow(
+                new OrderNotAssignedToEmployeeException("Only the employee assigned to the order can mark it as ready"));
+
+        mockMvc.perform(patch(READY_ORDER_URL).principal(employeeAuthentication))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Only the employee assigned to the order can mark it as ready"));
+    }
+
+    @Test
+    void markOrderReadyWhenTheClientPhoneCannotReceiveSmsReturns422() throws Exception {
+        when(orderHandler.markOrderReady(1L, TOKEN_EMPLOYEE_ID))
+                .thenThrow(new NotificationRejectedException("The client phone number cannot receive SMS"));
+
+        mockMvc.perform(patch(READY_ORDER_URL).principal(employeeAuthentication))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value("The client phone number cannot receive SMS"));
+    }
+
+    @Test
+    void markOrderReadyWhenTheMessagingServiceIsDownReturns503() throws Exception {
+        when(orderHandler.markOrderReady(1L, TOKEN_EMPLOYEE_ID))
+                .thenThrow(new MessagingServiceUnavailableException("The messaging service is not available"));
+
+        mockMvc.perform(patch(READY_ORDER_URL).principal(employeeAuthentication))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value("The messaging service is not available"));
+    }
+
+    @Test
+    void markOrderReadyWhenTheUsersServiceIsDownReturns503() throws Exception {
+        when(orderHandler.markOrderReady(1L, TOKEN_EMPLOYEE_ID))
+                .thenThrow(new UserServiceUnavailableException("The users service is not available"));
+
+        mockMvc.perform(patch(READY_ORDER_URL).principal(employeeAuthentication))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void markOrderReadyWithANonNumericIdReturns400WithAShortMessage() throws Exception {
+        mockMvc.perform(patch(ORDERS_URL + "/abc/ready").principal(employeeAuthentication))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Invalid value for parameter 'orderId'"));
 
