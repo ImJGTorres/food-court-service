@@ -1,5 +1,6 @@
 package com.pragma.powerup.application.handler.impl;
 
+import com.pragma.powerup.application.dto.request.OrderDeliveryRequestDto;
 import com.pragma.powerup.application.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.dto.response.OrderResponseDto;
 import com.pragma.powerup.application.dto.response.PageResponseDto;
@@ -7,24 +8,29 @@ import com.pragma.powerup.application.mapper.IOrderRequestMapper;
 import com.pragma.powerup.application.mapper.IOrderResponseMapper;
 import com.pragma.powerup.domain.api.IOrderServicePort;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
+import com.pragma.powerup.domain.exception.InvalidSecurityPinException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
 import com.pragma.powerup.domain.exception.MessagingServiceUnavailableException;
+import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.model.OrderModel;
 import com.pragma.powerup.domain.model.OrderStatus;
 import com.pragma.powerup.domain.model.PageModel;
+import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -151,5 +157,32 @@ class OrderHandlerTest {
                 () -> orderHandler.markOrderReady(ORDER_ID, EMPLOYEE_ID));
 
         verifyNoInteractions(orderResponseMapper);
+    }
+
+    @Test
+    void deliverOrderPassesThePinOfTheRequestAndReturnsTheMappedOrder() {
+        OrderDeliveryRequestDto deliveryRequest = new OrderDeliveryRequestDto();
+        deliveryRequest.setPin("482913");
+        OrderModel deliveredOrder = new OrderModel();
+        OrderResponseDto expectedResponse = new OrderResponseDto();
+        when(orderServicePort.deliverOrder(ORDER_ID, EMPLOYEE_ID, "482913")).thenReturn(deliveredOrder);
+        when(orderResponseMapper.toResponse(deliveredOrder)).thenReturn(expectedResponse);
+
+        OrderResponseDto result = orderHandler.deliverOrder(ORDER_ID, EMPLOYEE_ID, deliveryRequest);
+
+        assertSame(expectedResponse, result);
+        verify(orderServicePort).deliverOrder(ORDER_ID, EMPLOYEE_ID, "482913");
+    }
+
+    @Test
+    void deliverOrderKeepsTheFailedAttemptCountWhenThePinIsWrongOrTheOrderIsLocked() throws NoSuchMethodException {
+        Transactional transactional = OrderHandler.class
+                .getMethod("deliverOrder", Long.class, Long.class, OrderDeliveryRequestDto.class)
+                .getAnnotation(Transactional.class);
+
+        List<Class<?>> exceptionsThatDoNotRollBack = Arrays.asList(transactional.dontRollbackOn());
+
+        assertTrue(exceptionsThatDoNotRollBack.contains(InvalidSecurityPinException.class));
+        assertTrue(exceptionsThatDoNotRollBack.contains(OrderLockedException.class));
     }
 }
