@@ -141,6 +141,23 @@ public class OrderRestController {
         return ResponseEntity.ok(orderHandler.deliverOrder(orderId, getUserId(authentication), orderDeliveryRequestDto));
     }
 
+    @Operation(summary = "Cancel an order that is still pending; only the client who placed it")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Order cancelled",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OrderResponseDto.class))),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Not a client, or the order belongs to another client",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "Order not found", content = @Content),
+            @ApiResponse(responseCode = "409", description = "The order is already in preparation or later and cannot be cancelled",
+                    content = @Content)
+    })
+    @PatchMapping(value = "/orders/{orderId}/cancel", produces = "application/json")
+    public ResponseEntity<OrderResponseDto> cancelOrder(@PathVariable Long orderId, Authentication authentication) {
+        return ResponseEntity.ok(orderHandler.cancelOrder(orderId, getUserId(authentication)));
+    }
+
     private Long getUserId(Authentication authentication) {
         return (Long) authentication.getPrincipal();
     }
