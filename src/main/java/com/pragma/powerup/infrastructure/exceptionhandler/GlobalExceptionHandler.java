@@ -11,15 +11,18 @@ import com.pragma.powerup.domain.exception.InvalidEmployeeException;
 import com.pragma.powerup.domain.exception.InvalidOwnerException;
 import com.pragma.powerup.domain.exception.InvalidPaginationException;
 import com.pragma.powerup.domain.exception.InvalidRestaurantNameException;
+import com.pragma.powerup.domain.exception.InvalidSecurityPinException;
 import com.pragma.powerup.domain.exception.MessagingServiceUnavailableException;
 import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
 import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
+import com.pragma.powerup.domain.exception.OrderNotReadyException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantAlreadyExistsException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
@@ -75,7 +78,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({OrderInProgressException.class, OrderNotPendingException.class,
-            OrderNotInPreparationException.class})
+            OrderNotInPreparationException.class, OrderNotReadyException.class})
     public ResponseEntity<Map<String, String>> handleOrderConflictException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
@@ -90,6 +93,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleEmployeeAlreadyAssignedException(
             EmployeeAlreadyAssignedException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
+    }
+
+    @ExceptionHandler(OrderLockedException.class)
+    public ResponseEntity<Map<String, String>> handleOrderLockedException(OrderLockedException exception) {
+        return ResponseEntity.status(HttpStatus.LOCKED)
+                .body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
 
     @ExceptionHandler(NotificationRejectedException.class)
@@ -111,7 +120,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({NotRestaurantOwnerException.class, EmployeeNotAssignedException.class,
-            OrderNotFromEmployeeRestaurantException.class, OrderNotAssignedToEmployeeException.class})
+            OrderNotFromEmployeeRestaurantException.class, OrderNotAssignedToEmployeeException.class,
+            InvalidSecurityPinException.class})
     public ResponseEntity<Map<String, String>> handleForbiddenException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
