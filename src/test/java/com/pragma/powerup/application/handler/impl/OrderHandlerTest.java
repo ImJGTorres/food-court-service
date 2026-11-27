@@ -12,6 +12,7 @@ import com.pragma.powerup.domain.exception.InvalidSecurityPinException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
 import com.pragma.powerup.domain.exception.MessagingServiceUnavailableException;
 import com.pragma.powerup.domain.exception.OrderLockedException;
+import com.pragma.powerup.domain.exception.OrderNotCancellableException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
 import com.pragma.powerup.domain.model.OrderModel;
 import com.pragma.powerup.domain.model.OrderStatus;
@@ -184,5 +185,28 @@ class OrderHandlerTest {
 
         assertTrue(exceptionsThatDoNotRollBack.contains(InvalidSecurityPinException.class));
         assertTrue(exceptionsThatDoNotRollBack.contains(OrderLockedException.class));
+    }
+
+    @Test
+    void cancelOrderPassesTheOrderAndTheClientAndReturnsTheMappedOrder() {
+        OrderModel cancelledOrder = new OrderModel();
+        OrderResponseDto expectedResponse = new OrderResponseDto();
+        when(orderServicePort.cancelOrder(ORDER_ID, CLIENT_ID)).thenReturn(cancelledOrder);
+        when(orderResponseMapper.toResponse(cancelledOrder)).thenReturn(expectedResponse);
+
+        OrderResponseDto result = orderHandler.cancelOrder(ORDER_ID, CLIENT_ID);
+
+        assertSame(expectedResponse, result);
+        verify(orderServicePort).cancelOrder(ORDER_ID, CLIENT_ID);
+    }
+
+    @Test
+    void cancelOrderWhenTheOrderIsNotCancellablePropagatesTheException() {
+        when(orderServicePort.cancelOrder(ORDER_ID, CLIENT_ID))
+                .thenThrow(new OrderNotCancellableException("Lo sentimos, tu pedido ya está en preparación y no puede cancelarse"));
+
+        assertThrows(OrderNotCancellableException.class, () -> orderHandler.cancelOrder(ORDER_ID, CLIENT_ID));
+
+        verifyNoInteractions(orderResponseMapper);
     }
 }
