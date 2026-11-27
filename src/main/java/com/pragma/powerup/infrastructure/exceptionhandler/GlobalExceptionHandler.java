@@ -18,6 +18,8 @@ import com.pragma.powerup.domain.exception.NotRestaurantOwnerException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
 import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
+import com.pragma.powerup.domain.exception.OrderNotCancellableException;
+import com.pragma.powerup.domain.exception.OrderNotFromClientException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
 import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
@@ -78,7 +80,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({OrderInProgressException.class, OrderNotPendingException.class,
-            OrderNotInPreparationException.class, OrderNotReadyException.class})
+            OrderNotInPreparationException.class, OrderNotReadyException.class, OrderNotCancellableException.class})
     public ResponseEntity<Map<String, String>> handleOrderConflictException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }
@@ -121,7 +123,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({NotRestaurantOwnerException.class, EmployeeNotAssignedException.class,
             OrderNotFromEmployeeRestaurantException.class, OrderNotAssignedToEmployeeException.class,
-            InvalidSecurityPinException.class})
+            InvalidSecurityPinException.class, OrderNotFromClientException.class})
     public ResponseEntity<Map<String, String>> handleForbiddenException(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Collections.singletonMap(MESSAGE, exception.getMessage()));
     }

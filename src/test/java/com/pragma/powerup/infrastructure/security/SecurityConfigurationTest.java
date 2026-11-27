@@ -47,6 +47,7 @@ class SecurityConfigurationTest {
     private static final String ASSIGN_ORDER_URL = "/api/v1/orders/1/assign";
     private static final String READY_ORDER_URL = "/api/v1/orders/1/ready";
     private static final String DELIVER_ORDER_URL = "/api/v1/orders/1/deliver";
+    private static final String CANCEL_ORDER_URL = "/api/v1/orders/1/cancel";
     private static final String VALID_PIN_JSON = "{\"pin\": \"482913\"}";
     private static final String RESTAURANT_EMPLOYEES_URL = "/api/v1/restaurants/1/employees";
     private static final String AUTHORIZATION = "Authorization";
@@ -523,6 +524,29 @@ class SecurityConfigurationTest {
         mockMvc.perform(patch(DELIVER_ORDER_URL)
                         .header(AUTHORIZATION, bearerTokenFor(24L, "EMPLOYEE"))
                         .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    void patchCancelOrderWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(patch(CANCEL_ORDER_URL)).andExpect(status().isUnauthorized());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"EMPLOYEE", "OWNER", "ADMIN"})
+    void patchCancelOrderWithARoleThatIsNotClientReturns403(String role) throws Exception {
+        mockMvc.perform(patch(CANCEL_ORDER_URL).header(AUTHORIZATION, bearerTokenFor(24L, role)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patchCancelOrderGivesTheHandlerTheUserIdOfTheTokenAsClientId() throws Exception {
+        OrderResponseDto response = new OrderResponseDto();
+        response.setId(1L);
+        when(orderHandler.cancelOrder(1L, 20L)).thenReturn(response);
+
+        mockMvc.perform(patch(CANCEL_ORDER_URL).header(AUTHORIZATION, bearerTokenFor(20L, "CLIENT")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
     }

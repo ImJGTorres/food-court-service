@@ -17,6 +17,8 @@ import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
 import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
+import com.pragma.powerup.domain.exception.OrderNotCancellableException;
+import com.pragma.powerup.domain.exception.OrderNotFromClientException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
 import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
@@ -65,6 +67,7 @@ class OrderRestControllerTest {
     private static final String ASSIGN_ORDER_URL = "/api/v1/orders/1/assign";
     private static final String READY_ORDER_URL = "/api/v1/orders/1/ready";
     private static final String DELIVER_ORDER_URL = "/api/v1/orders/1/deliver";
+    private static final String CANCEL_ORDER_URL = "/api/v1/orders/1/cancel";
     private static final String VALID_PIN_JSON = "{\"pin\": \"482913\"}";
     private static final Long TOKEN_CLIENT_ID = 20L;
     private static final Long TOKEN_EMPLOYEE_ID = 24L;
@@ -591,6 +594,57 @@ class OrderRestControllerTest {
     void deliverOrderWithANonNumericIdReturns400WithAShortMessage() throws Exception {
         mockMvc.perform(patch(ORDERS_URL + "/abc/deliver").principal(employeeAuthentication)
                         .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'orderId'"));
+
+        verifyNoInteractions(orderHandler);
+    }
+
+    @Test
+    void cancelOrderReturns200WithTheCancelledOrder() throws Exception {
+        OrderResponseDto response = new OrderResponseDto();
+        response.setId(1L);
+        response.setStatus("CANCELLED");
+        when(orderHandler.cancelOrder(1L, TOKEN_CLIENT_ID)).thenReturn(response);
+
+        mockMvc.perform(patch(CANCEL_ORDER_URL).principal(clientAuthentication))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void cancelAMissingOrderReturns404() throws Exception {
+        when(orderHandler.cancelOrder(1L, TOKEN_CLIENT_ID))
+                .thenThrow(new OrderNotFoundException("The requested order does not exist"));
+
+        mockMvc.perform(patch(CANCEL_ORDER_URL).principal(clientAuthentication))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void cancelAnOrderThatIsNotPendingReturns409WithTheMessageOfTheBacklog() throws Exception {
+        String message = "Lo sentimos, tu pedido ya está en preparación y no puede cancelarse";
+        when(orderHandler.cancelOrder(1L, TOKEN_CLIENT_ID)).thenThrow(new OrderNotCancellableException(message));
+
+        mockMvc.perform(patch(CANCEL_ORDER_URL).principal(clientAuthentication))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(message));
+    }
+
+    @Test
+    void cancelAnOrderOfAnotherClientReturns403() throws Exception {
+        when(orderHandler.cancelOrder(1L, TOKEN_CLIENT_ID))
+                .thenThrow(new OrderNotFromClientException("The order does not belong to the client"));
+
+        mockMvc.perform(patch(CANCEL_ORDER_URL).principal(clientAuthentication))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("The order does not belong to the client"));
+    }
+
+    @Test
+    void cancelOrderWithANonNumericIdReturns400WithAShortMessage() throws Exception {
+        mockMvc.perform(patch(ORDERS_URL + "/abc/cancel").principal(clientAuthentication))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Invalid value for parameter 'orderId'"));
 

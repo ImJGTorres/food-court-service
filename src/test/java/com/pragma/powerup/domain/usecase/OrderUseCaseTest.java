@@ -11,7 +11,9 @@ import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
 import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
+import com.pragma.powerup.domain.exception.OrderNotCancellableException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
+import com.pragma.powerup.domain.exception.OrderNotFromClientException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
 import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
@@ -591,5 +593,72 @@ class OrderUseCaseTest {
                 () -> orderUseCase.deliverOrder(ORDER_ID, 99L, WRONG_PIN));
 
         assertEquals(0, order.getFailedPinAttempts());
+    }
+
+    private static final String NOT_CANCELLABLE_MESSAGE =
+            "Lo sentimos, tu pedido ya está en preparación y no puede cancelarse";
+
+    private OrderModel buildOrderOfTheClient(OrderStatus status) {
+        OrderModel order = buildExistingOrder(RESTAURANT_ID, status);
+        order.setClientId(CLIENT_ID);
+        return order;
+    }
+
+    @Test
+    void cancelOrderOfTheClientThatIsPendingMarksItCancelledAndSavesIt() {
+        OrderModel order = buildOrderOfTheClient(OrderStatus.PENDING);
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(orderPersistencePort.saveOrder(order)).thenReturn(order);
+
+        OrderModel result = orderUseCase.cancelOrder(ORDER_ID, CLIENT_ID);
+
+        assertAll(
+                () -> assertSame(order, result),
+                () -> assertEquals(OrderStatus.CANCELLED, result.getStatus())
+        );
+        verify(orderPersistencePort).saveOrder(order);
+    }
+
+    @Test
+    void cancelOrderWhenTheOrderDoesNotExistThrowsOrderNotFoundException() {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.empty());
+
+        OrderNotFoundException exception = assertThrows(OrderNotFoundException.class,
+                () -> orderUseCase.cancelOrder(ORDER_ID, CLIENT_ID));
+
+        assertEquals("The requested order does not exist", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any(OrderModel.class));
+    }
+
+    @Test
+    void cancelOrderOfAnotherClientThrowsOrderNotFromClientExceptionAndSavesNothing() {
+        when(orderPersistencePort.findOrderById(ORDER_ID))
+                .thenReturn(Optional.of(buildOrderOfTheClient(OrderStatus.PENDING)));
+
+        OrderNotFromClientException exception = assertThrows(OrderNotFromClientException.class,
+                () -> orderUseCase.cancelOrder(ORDER_ID, 99L));
+
+        assertEquals("The order does not belong to the client", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any(OrderModel.class));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OrderStatus.class, names = "PENDING", mode = EnumSource.Mode.EXCLUDE)
+    void cancelOrderThatIsNotPendingThrowsOrderNotCancellableExceptionWithTheMessageOfTheBacklog(OrderStatus status) {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(buildOrderOfTheClient(status)));
+
+        OrderNotCancellableException exception = assertThrows(OrderNotCancellableException.class,
+                () -> orderUseCase.cancelOrder(ORDER_ID, CLIENT_ID));
+
+        assertEquals(NOT_CANCELLABLE_MESSAGE, exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any(OrderModel.class));
+    }
+
+    @Test
+    void cancelOrderChecksTheOwnerBeforeTheStatusSoTheStatusOfAnotherClientOrderIsNotRevealed() {
+        when(orderPersistencePort.findOrderById(ORDER_ID))
+                .thenReturn(Optional.of(buildOrderOfTheClient(OrderStatus.READY)));
+
+        assertThrows(OrderNotFromClientException.class, () -> orderUseCase.cancelOrder(ORDER_ID, 99L));
     }
 }
