@@ -9,7 +9,9 @@ import com.pragma.powerup.domain.exception.InvalidSecurityPinException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
 import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
+import com.pragma.powerup.domain.exception.OrderNotCancellableException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
+import com.pragma.powerup.domain.exception.OrderNotFromClientException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
 import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
@@ -56,6 +58,9 @@ public class OrderUseCase implements IOrderServicePort {
             "Only orders in preparation can be marked as ready";
     private static final String ORDER_NOT_ASSIGNED_TO_EMPLOYEE_MESSAGE =
             "Only the employee assigned to the order can mark it as ready";
+    private static final String ORDER_NOT_FROM_CLIENT_MESSAGE = "The order does not belong to the client";
+    private static final String ORDER_NOT_CANCELLABLE_MESSAGE =
+            "Lo sentimos, tu pedido ya está en preparación y no puede cancelarse";
     private static final int MAX_PIN_ATTEMPTS = 5;
     private static final String ORDER_NOT_READY_MESSAGE = "Only ready orders can be delivered";
     private static final String ORDER_NOT_ASSIGNED_TO_DELIVER_MESSAGE =
@@ -173,6 +178,19 @@ public class OrderUseCase implements IOrderServicePort {
             throw new OrderLockedException(ORDER_LOCKED_MESSAGE);
         }
         throw new InvalidSecurityPinException(String.format(INVALID_PIN_MESSAGE, attemptsLeft));
+    }
+
+    @Override
+    public OrderModel cancelOrder(Long orderId, Long clientId) {
+        OrderModel order = findOrder(orderId);
+        if (!clientId.equals(order.getClientId())) {
+            throw new OrderNotFromClientException(ORDER_NOT_FROM_CLIENT_MESSAGE);
+        }
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new OrderNotCancellableException(ORDER_NOT_CANCELLABLE_MESSAGE);
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        return orderPersistencePort.saveOrder(order);
     }
 
     private OrderModel findOrder(Long orderId) {
