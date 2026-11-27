@@ -32,6 +32,7 @@ class OrderResponseMapperTest {
         readyOrder.setRestaurant(restaurant);
         readyOrder.setStatus(OrderStatus.READY);
         readyOrder.setSecurityPin(PIN);
+        readyOrder.setFailedPinAttempts(3);
         readyOrder.setDishes(List.of());
 
         OrderResponseDto response = orderResponseMapper.toResponse(readyOrder);
@@ -39,6 +40,7 @@ class OrderResponseMapperTest {
 
         assertFalse(json.contains(PIN));
         assertFalse(json.toLowerCase().contains("pin"));
+        assertFalse(json.toLowerCase().contains("attempt"));
     }
 
     @Test
