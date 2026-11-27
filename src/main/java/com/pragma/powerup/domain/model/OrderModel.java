@@ -22,4 +22,5 @@ public class OrderModel {
     private List<OrderDishModel> dishes;
     private Long version;
     private String securityPin;
+    private int failedPinAttempts;
 }

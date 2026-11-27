@@ -5,14 +5,17 @@ import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.InvalidPaginationException;
+import com.pragma.powerup.domain.exception.InvalidSecurityPinException;
 import com.pragma.powerup.domain.exception.MessagingServiceUnavailableException;
 import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
 import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
+import com.pragma.powerup.domain.exception.OrderNotReadyException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.model.DishModel;
@@ -469,5 +472,124 @@ class OrderUseCaseTest {
 
         assertThrows(MessagingServiceUnavailableException.class,
                 () -> orderUseCase.markOrderReady(ORDER_ID, EMPLOYEE_ID));
+    }
+
+    private static final String WRONG_PIN = "000000";
+
+    private OrderModel buildReadyOrder(int failedPinAttempts) {
+        OrderModel order = buildExistingOrder(RESTAURANT_ID, OrderStatus.READY);
+        order.setClientId(CLIENT_ID);
+        order.setEmployeeId(EMPLOYEE_ID);
+        order.setSecurityPin(PIN);
+        order.setFailedPinAttempts(failedPinAttempts);
+        return order;
+    }
+
+    @Test
+    void deliverOrderWithTheRightPinMarksItDeliveredErasesThePinAndSavesIt() {
+        OrderModel order = buildReadyOrder(2);
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(orderPersistencePort.saveOrder(order)).thenReturn(order);
+
+        OrderModel result = orderUseCase.deliverOrder(ORDER_ID, EMPLOYEE_ID, PIN);
+
+        assertAll(
+                () -> assertSame(order, result),
+                () -> assertEquals(OrderStatus.DELIVERED, result.getStatus()),
+                () -> assertNull(result.getSecurityPin())
+        );
+        verify(orderPersistencePort).saveOrder(order);
+    }
+
+    @Test
+    void deliverOrderWhenTheOrderDoesNotExistThrowsOrderNotFoundException() {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.empty());
+
+        OrderNotFoundException exception = assertThrows(OrderNotFoundException.class,
+                () -> orderUseCase.deliverOrder(ORDER_ID, EMPLOYEE_ID, PIN));
+
+        assertEquals("The requested order does not exist", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any(OrderModel.class));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OrderStatus.class, names = "READY", mode = EnumSource.Mode.EXCLUDE)
+    void deliverOrderWhenTheOrderIsNotReadyThrowsOrderNotReadyException(OrderStatus status) {
+        OrderModel order = buildReadyOrder(0);
+        order.setStatus(status);
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        OrderNotReadyException exception = assertThrows(OrderNotReadyException.class,
+                () -> orderUseCase.deliverOrder(ORDER_ID, EMPLOYEE_ID, PIN));
+
+        assertEquals("Only ready orders can be delivered", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any(OrderModel.class));
+    }
+
+    @Test
+    void deliverOrderByAnEmployeeThatIsNotTheAssignedOneThrowsOrderNotAssignedToEmployeeException() {
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(buildReadyOrder(0)));
+
+        OrderNotAssignedToEmployeeException exception = assertThrows(OrderNotAssignedToEmployeeException.class,
+                () -> orderUseCase.deliverOrder(ORDER_ID, 99L, PIN));
+
+        assertEquals("Only the employee assigned to the order can deliver it", exception.getMessage());
+        verify(orderPersistencePort, never()).saveOrder(any(OrderModel.class));
+    }
+
+    @Test
+    void deliverOrderWithAWrongPinCountsTheFailureSavesItAndTellsHowManyAttemptsAreLeft() {
+        OrderModel order = buildReadyOrder(1);
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        InvalidSecurityPinException exception = assertThrows(InvalidSecurityPinException.class,
+                () -> orderUseCase.deliverOrder(ORDER_ID, EMPLOYEE_ID, WRONG_PIN));
+
+        ArgumentCaptor<OrderModel> orderCaptor = ArgumentCaptor.forClass(OrderModel.class);
+        verify(orderPersistencePort).saveOrder(orderCaptor.capture());
+        assertAll(
+                () -> assertEquals("Incorrect security PIN, 3 attempts left", exception.getMessage()),
+                () -> assertEquals(2, orderCaptor.getValue().getFailedPinAttempts()),
+                () -> assertEquals(OrderStatus.READY, orderCaptor.getValue().getStatus()),
+                () -> assertEquals(PIN, orderCaptor.getValue().getSecurityPin())
+        );
+    }
+
+    @Test
+    void deliverOrderWithTheFifthWrongPinSavesTheFailureAndLocksTheOrder() {
+        OrderModel order = buildReadyOrder(4);
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        OrderLockedException exception = assertThrows(OrderLockedException.class,
+                () -> orderUseCase.deliverOrder(ORDER_ID, EMPLOYEE_ID, WRONG_PIN));
+
+        assertEquals("Too many incorrect PIN attempts, the order is locked", exception.getMessage());
+        assertEquals(5, order.getFailedPinAttempts());
+        verify(orderPersistencePort).saveOrder(order);
+    }
+
+    @Test
+    void deliverOrderWhenTheOrderIsAlreadyLockedRefusesEvenTheRightPinAndSavesNothing() {
+        OrderModel order = buildReadyOrder(5);
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThrows(OrderLockedException.class, () -> orderUseCase.deliverOrder(ORDER_ID, EMPLOYEE_ID, PIN));
+
+        assertAll(
+                () -> assertEquals(OrderStatus.READY, order.getStatus()),
+                () -> assertEquals(PIN, order.getSecurityPin())
+        );
+        verify(orderPersistencePort, never()).saveOrder(any(OrderModel.class));
+    }
+
+    @Test
+    void deliverOrderChecksTheEmployeeBeforeThePinSoAStrangerCannotBurnTheAttempts() {
+        OrderModel order = buildReadyOrder(0);
+        when(orderPersistencePort.findOrderById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThrows(OrderNotAssignedToEmployeeException.class,
+                () -> orderUseCase.deliverOrder(ORDER_ID, 99L, WRONG_PIN));
+
+        assertEquals(0, order.getFailedPinAttempts());
     }
 }
