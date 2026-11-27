@@ -62,4 +62,7 @@ public class OrderEntity {
 
     @Column(name = "security_pin", length = 6)
     private String securityPin;
+
+    @Column(name = "failed_pin_attempts", nullable = false, columnDefinition = "int default 0")
+    private int failedPinAttempts;
 }

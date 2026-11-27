@@ -5,12 +5,15 @@ import com.pragma.powerup.domain.exception.DishNotFoundException;
 import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
+import com.pragma.powerup.domain.exception.InvalidSecurityPinException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
 import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
+import com.pragma.powerup.domain.exception.OrderNotReadyException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.model.DishModel;
@@ -27,6 +30,8 @@ import com.pragma.powerup.domain.spi.IRestaurantEmployeePersistencePort;
 import com.pragma.powerup.domain.spi.IRestaurantPersistencePort;
 import com.pragma.powerup.domain.spi.IUserClientPort;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -51,6 +56,12 @@ public class OrderUseCase implements IOrderServicePort {
             "Only orders in preparation can be marked as ready";
     private static final String ORDER_NOT_ASSIGNED_TO_EMPLOYEE_MESSAGE =
             "Only the employee assigned to the order can mark it as ready";
+    private static final int MAX_PIN_ATTEMPTS = 5;
+    private static final String ORDER_NOT_READY_MESSAGE = "Only ready orders can be delivered";
+    private static final String ORDER_NOT_ASSIGNED_TO_DELIVER_MESSAGE =
+            "Only the employee assigned to the order can deliver it";
+    private static final String ORDER_LOCKED_MESSAGE = "Too many incorrect PIN attempts, the order is locked";
+    private static final String INVALID_PIN_MESSAGE = "Incorrect security PIN, %d attempts left";
     private static final String ORDER_READY_SMS = "Pedido #%d listo en %s. Tu PIN de seguridad es %s.";
 
     private final IOrderPersistencePort orderPersistencePort;
@@ -127,6 +138,41 @@ public class OrderUseCase implements IOrderServicePort {
         OrderModel savedOrder = orderPersistencePort.saveOrder(order);
         notificationPort.sendSms(userClientPort.getClientPhone(order.getClientId()), buildReadySms(order));
         return savedOrder;
+    }
+
+    @Override
+    public OrderModel deliverOrder(Long orderId, Long employeeId, String pin) {
+        OrderModel order = findOrder(orderId);
+        if (order.getStatus() != OrderStatus.READY) {
+            throw new OrderNotReadyException(ORDER_NOT_READY_MESSAGE);
+        }
+        if (!employeeId.equals(order.getEmployeeId())) {
+            throw new OrderNotAssignedToEmployeeException(ORDER_NOT_ASSIGNED_TO_DELIVER_MESSAGE);
+        }
+        if (order.getFailedPinAttempts() >= MAX_PIN_ATTEMPTS) {
+            throw new OrderLockedException(ORDER_LOCKED_MESSAGE);
+        }
+        if (!isSamePin(order.getSecurityPin(), pin)) {
+            rejectWrongPin(order);
+        }
+        order.setStatus(OrderStatus.DELIVERED);
+        order.setSecurityPin(null);
+        return orderPersistencePort.saveOrder(order);
+    }
+
+    private boolean isSamePin(String expectedPin, String receivedPin) {
+        return MessageDigest.isEqual(expectedPin.getBytes(StandardCharsets.UTF_8),
+                receivedPin.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void rejectWrongPin(OrderModel order) {
+        order.setFailedPinAttempts(order.getFailedPinAttempts() + 1);
+        orderPersistencePort.saveOrder(order);
+        int attemptsLeft = MAX_PIN_ATTEMPTS - order.getFailedPinAttempts();
+        if (attemptsLeft <= 0) {
+            throw new OrderLockedException(ORDER_LOCKED_MESSAGE);
+        }
+        throw new InvalidSecurityPinException(String.format(INVALID_PIN_MESSAGE, attemptsLeft));
     }
 
     private OrderModel findOrder(Long orderId) {

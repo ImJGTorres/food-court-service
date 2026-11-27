@@ -1,6 +1,7 @@
 package com.pragma.powerup.infrastructure.security;
 
 import com.pragma.powerup.application.dto.request.DishRequestDto;
+import com.pragma.powerup.application.dto.request.OrderDeliveryRequestDto;
 import com.pragma.powerup.application.dto.response.DishResponseDto;
 import com.pragma.powerup.application.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.dto.response.OrderResponseDto;
@@ -13,6 +14,8 @@ import com.pragma.powerup.infrastructure.input.rest.OrderRestController;
 import com.pragma.powerup.infrastructure.input.rest.RestaurantEmployeeRestController;
 import com.pragma.powerup.infrastructure.input.rest.RestaurantRestController;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -43,6 +46,8 @@ class SecurityConfigurationTest {
     private static final String ORDERS_URL = "/api/v1/orders";
     private static final String ASSIGN_ORDER_URL = "/api/v1/orders/1/assign";
     private static final String READY_ORDER_URL = "/api/v1/orders/1/ready";
+    private static final String DELIVER_ORDER_URL = "/api/v1/orders/1/deliver";
+    private static final String VALID_PIN_JSON = "{\"pin\": \"482913\"}";
     private static final String RESTAURANT_EMPLOYEES_URL = "/api/v1/restaurants/1/employees";
     private static final String AUTHORIZATION = "Authorization";
 
@@ -490,6 +495,34 @@ class SecurityConfigurationTest {
         when(orderHandler.markOrderReady(1L, 24L)).thenReturn(response);
 
         mockMvc.perform(patch(READY_ORDER_URL).header(AUTHORIZATION, bearerTokenFor(24L, "EMPLOYEE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+    }
+
+    @Test
+    void patchDeliverOrderWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(patch(DELIVER_ORDER_URL).contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CLIENT", "OWNER", "ADMIN"})
+    void patchDeliverOrderWithARoleThatIsNotEmployeeReturns403(String role) throws Exception {
+        mockMvc.perform(patch(DELIVER_ORDER_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(20L, role))
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void patchDeliverOrderGivesTheHandlerTheUserIdOfTheTokenAsEmployeeId() throws Exception {
+        OrderResponseDto response = new OrderResponseDto();
+        response.setId(1L);
+        when(orderHandler.deliverOrder(eq(1L), eq(24L), any(OrderDeliveryRequestDto.class))).thenReturn(response);
+
+        mockMvc.perform(patch(DELIVER_ORDER_URL)
+                        .header(AUTHORIZATION, bearerTokenFor(24L, "EMPLOYEE"))
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
     }

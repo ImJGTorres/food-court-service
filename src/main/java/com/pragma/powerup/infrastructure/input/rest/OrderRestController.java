@@ -1,5 +1,6 @@
 package com.pragma.powerup.infrastructure.input.rest;
 
+import com.pragma.powerup.application.dto.request.OrderDeliveryRequestDto;
 import com.pragma.powerup.application.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.dto.response.OrderResponseDto;
 import com.pragma.powerup.application.dto.response.PageResponseDto;
@@ -114,6 +115,30 @@ public class OrderRestController {
     public ResponseEntity<OrderResponseDto> markOrderReady(@PathVariable Long orderId,
                                                            Authentication authentication) {
         return ResponseEntity.ok(orderHandler.markOrderReady(orderId, getUserId(authentication)));
+    }
+
+    @Operation(summary = "Deliver a ready order: the employee must type the PIN the client received by SMS")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Order delivered",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = OrderResponseDto.class))),
+            @ApiResponse(responseCode = "400", description = "The PIN is missing or does not have 6 digits",
+                    content = @Content),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "Not an employee, not the employee assigned to the order or incorrect PIN",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "Order not found", content = @Content),
+            @ApiResponse(responseCode = "409", description = "The order is not ready or changed at the same time",
+                    content = @Content),
+            @ApiResponse(responseCode = "423", description = "Too many incorrect PIN attempts: the order is locked",
+                    content = @Content)
+    })
+    @PatchMapping(value = "/orders/{orderId}/deliver", consumes = "application/json", produces = "application/json")
+    public ResponseEntity<OrderResponseDto> deliverOrder(@PathVariable Long orderId,
+                                                         @Valid @RequestBody OrderDeliveryRequestDto orderDeliveryRequestDto,
+                                                         Authentication authentication) {
+        return ResponseEntity.ok(orderHandler.deliverOrder(orderId, getUserId(authentication), orderDeliveryRequestDto));
     }
 
     private Long getUserId(Authentication authentication) {

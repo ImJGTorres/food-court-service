@@ -1,5 +1,6 @@
 package com.pragma.powerup.application.handler.impl;
 
+import com.pragma.powerup.application.dto.request.OrderDeliveryRequestDto;
 import com.pragma.powerup.application.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.dto.response.OrderResponseDto;
 import com.pragma.powerup.application.dto.response.PageResponseDto;
@@ -7,6 +8,8 @@ import com.pragma.powerup.application.handler.IOrderHandler;
 import com.pragma.powerup.application.mapper.IOrderRequestMapper;
 import com.pragma.powerup.application.mapper.IOrderResponseMapper;
 import com.pragma.powerup.domain.api.IOrderServicePort;
+import com.pragma.powerup.domain.exception.InvalidSecurityPinException;
+import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.model.OrderModel;
 import com.pragma.powerup.domain.model.OrderStatus;
 import com.pragma.powerup.domain.model.PageModel;
@@ -49,5 +52,13 @@ public class OrderHandler implements IOrderHandler {
     @Override
     public OrderResponseDto markOrderReady(Long orderId, Long employeeId) {
         return orderResponseMapper.toResponse(orderServicePort.markOrderReady(orderId, employeeId));
+    }
+
+    @Override
+    @Transactional(dontRollbackOn = {InvalidSecurityPinException.class, OrderLockedException.class})
+    public OrderResponseDto deliverOrder(Long orderId, Long employeeId,
+                                         OrderDeliveryRequestDto orderDeliveryRequestDto) {
+        return orderResponseMapper.toResponse(
+                orderServicePort.deliverOrder(orderId, employeeId, orderDeliveryRequestDto.getPin()));
     }
 }

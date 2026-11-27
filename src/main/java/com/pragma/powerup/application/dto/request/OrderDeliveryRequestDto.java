@@ -1,0 +1,14 @@
+package com.pragma.powerup.application.dto.request;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+public class OrderDeliveryRequestDto {
+    @NotBlank
+    @Pattern(regexp = "\\d{6}", message = "The PIN must have exactly 6 digits")
+    private String pin;
+}

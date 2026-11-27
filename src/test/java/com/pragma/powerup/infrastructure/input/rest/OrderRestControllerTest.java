@@ -1,5 +1,6 @@
 package com.pragma.powerup.infrastructure.input.rest;
 
+import com.pragma.powerup.application.dto.request.OrderDeliveryRequestDto;
 import com.pragma.powerup.application.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.dto.response.OrderDishResponseDto;
 import com.pragma.powerup.application.dto.response.OrderResponseDto;
@@ -10,14 +11,17 @@ import com.pragma.powerup.domain.exception.DishNotFromRestaurantException;
 import com.pragma.powerup.domain.exception.EmployeeNotAssignedException;
 import com.pragma.powerup.domain.exception.InactiveDishException;
 import com.pragma.powerup.domain.exception.InvalidPaginationException;
+import com.pragma.powerup.domain.exception.InvalidSecurityPinException;
 import com.pragma.powerup.domain.exception.MessagingServiceUnavailableException;
 import com.pragma.powerup.domain.exception.NotificationRejectedException;
 import com.pragma.powerup.domain.exception.OrderInProgressException;
+import com.pragma.powerup.domain.exception.OrderLockedException;
 import com.pragma.powerup.domain.exception.OrderNotAssignedToEmployeeException;
 import com.pragma.powerup.domain.exception.OrderNotFoundException;
 import com.pragma.powerup.domain.exception.OrderNotFromEmployeeRestaurantException;
 import com.pragma.powerup.domain.exception.OrderNotInPreparationException;
 import com.pragma.powerup.domain.exception.OrderNotPendingException;
+import com.pragma.powerup.domain.exception.OrderNotReadyException;
 import com.pragma.powerup.domain.exception.RepeatedDishException;
 import com.pragma.powerup.domain.exception.RestaurantNotFoundException;
 import com.pragma.powerup.domain.exception.UserServiceUnavailableException;
@@ -27,6 +31,9 @@ import com.pragma.powerup.infrastructure.out.jpa.entity.OrderEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,6 +47,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -56,6 +64,8 @@ class OrderRestControllerTest {
     private static final String ORDERS_URL = "/api/v1/orders";
     private static final String ASSIGN_ORDER_URL = "/api/v1/orders/1/assign";
     private static final String READY_ORDER_URL = "/api/v1/orders/1/ready";
+    private static final String DELIVER_ORDER_URL = "/api/v1/orders/1/deliver";
+    private static final String VALID_PIN_JSON = "{\"pin\": \"482913\"}";
     private static final Long TOKEN_CLIENT_ID = 20L;
     private static final Long TOKEN_EMPLOYEE_ID = 24L;
     private static final String VALID_ORDER_JSON = """
@@ -472,6 +482,115 @@ class OrderRestControllerTest {
     @Test
     void markOrderReadyWithANonNumericIdReturns400WithAShortMessage() throws Exception {
         mockMvc.perform(patch(ORDERS_URL + "/abc/ready").principal(employeeAuthentication))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter 'orderId'"));
+
+        verifyNoInteractions(orderHandler);
+    }
+
+    @Test
+    void deliverOrderReturns200WithTheDeliveredOrderAndNeverShowsThePinOrTheAttempts() throws Exception {
+        OrderResponseDto response = new OrderResponseDto();
+        response.setId(1L);
+        response.setStatus("DELIVERED");
+        when(orderHandler.deliverOrder(eq(1L), eq(TOKEN_EMPLOYEE_ID), any(OrderDeliveryRequestDto.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(patch(DELIVER_ORDER_URL)
+                        .principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_PIN_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value("DELIVERED"))
+                .andExpect(jsonPath("$.securityPin").doesNotExist())
+                .andExpect(jsonPath("$.failedPinAttempts").doesNotExist());
+
+        ArgumentCaptor<OrderDeliveryRequestDto> requestCaptor = ArgumentCaptor.forClass(OrderDeliveryRequestDto.class);
+        verify(orderHandler).deliverOrder(eq(1L), eq(TOKEN_EMPLOYEE_ID), requestCaptor.capture());
+        assertEquals("482913", requestCaptor.getValue().getPin());
+    }
+
+    @Test
+    void deliverAMissingOrderReturns404() throws Exception {
+        when(orderHandler.deliverOrder(eq(1L), eq(TOKEN_EMPLOYEE_ID), any(OrderDeliveryRequestDto.class)))
+                .thenThrow(new OrderNotFoundException("The requested order does not exist"));
+
+        mockMvc.perform(patch(DELIVER_ORDER_URL).principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deliverAnOrderThatIsNotReadyReturns409() throws Exception {
+        when(orderHandler.deliverOrder(eq(1L), eq(TOKEN_EMPLOYEE_ID), any(OrderDeliveryRequestDto.class)))
+                .thenThrow(new OrderNotReadyException("Only ready orders can be delivered"));
+
+        mockMvc.perform(patch(DELIVER_ORDER_URL).principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Only ready orders can be delivered"));
+    }
+
+    @Test
+    void deliverAnOrderAssignedToAnotherEmployeeReturns403() throws Exception {
+        when(orderHandler.deliverOrder(eq(1L), eq(TOKEN_EMPLOYEE_ID), any(OrderDeliveryRequestDto.class)))
+                .thenThrow(new OrderNotAssignedToEmployeeException(
+                        "Only the employee assigned to the order can deliver it"));
+
+        mockMvc.perform(patch(DELIVER_ORDER_URL).principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Only the employee assigned to the order can deliver it"));
+    }
+
+    @Test
+    void deliverAnOrderWithAWrongPinReturns403WithTheAttemptsLeft() throws Exception {
+        when(orderHandler.deliverOrder(eq(1L), eq(TOKEN_EMPLOYEE_ID), any(OrderDeliveryRequestDto.class)))
+                .thenThrow(new InvalidSecurityPinException("Incorrect security PIN, 4 attempts left"));
+
+        mockMvc.perform(patch(DELIVER_ORDER_URL).principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Incorrect security PIN, 4 attempts left"));
+    }
+
+    @Test
+    void deliverALockedOrderReturns423() throws Exception {
+        when(orderHandler.deliverOrder(eq(1L), eq(TOKEN_EMPLOYEE_ID), any(OrderDeliveryRequestDto.class)))
+                .thenThrow(new OrderLockedException("Too many incorrect PIN attempts, the order is locked"));
+
+        mockMvc.perform(patch(DELIVER_ORDER_URL).principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
+                .andExpect(status().isLocked())
+                .andExpect(jsonPath("$.message").value("Too many incorrect PIN attempts, the order is locked"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"pin\": \"\"}", "{\"pin\": \"12345\"}", "{\"pin\": \"1234567\"}",
+            "{\"pin\": \"12a456\"}"})
+    void deliverOrderWithAMissingOrMalformedPinReturns400WithoutSpendingAnAttempt(String body) throws Exception {
+        mockMvc.perform(patch(DELIVER_ORDER_URL).principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.pin").exists());
+
+        verifyNoInteractions(orderHandler);
+    }
+
+    @Test
+    void deliverOrderWithABrokenJsonReturns400() throws Exception {
+        mockMvc.perform(patch(DELIVER_ORDER_URL).principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"pin\": "))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(orderHandler);
+    }
+
+    @Test
+    void deliverOrderWithANonNumericIdReturns400WithAShortMessage() throws Exception {
+        mockMvc.perform(patch(ORDERS_URL + "/abc/deliver").principal(employeeAuthentication)
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_PIN_JSON))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Invalid value for parameter 'orderId'"));
 
